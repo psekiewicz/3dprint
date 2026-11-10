@@ -12,8 +12,11 @@ export const STATUS = {
 
 // Wersja pokazowa: włącza ją kod klasy (albo hasło nauczyciela) „demo".
 export const DEMO_CODE = 'demo';
-export const isDemo = () => { try { return localStorage.getItem('demo') === '1'; } catch { return false; } };
+// Flaga jest też trzymana w pamięci, bo niektóre przeglądarki (tryb prywatny, blokada danych witryn) nie pozwalają na localStorage.
+let demoInMemory = false;
+export const isDemo = () => { try { return demoInMemory || localStorage.getItem('demo') === '1'; } catch { return demoInMemory; } };
 export function setDemo(on) {
+  demoInMemory = on;
   try { on ? localStorage.setItem('demo', '1') : localStorage.removeItem('demo'); } catch { /* tryb prywatny */ }
   showDemoBanner();
 }
@@ -35,13 +38,17 @@ export async function api(path, options = {}) {
   } catch {
     throw new Error('Brak połączenia z serwerem. Sprawdź, czy jesteś w sieci szkolnej.');
   }
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const err = new Error(data.error || `Błąd serwera (${res.status}).`);
+    // Odpowiedź bez JSON-a z błędem 404/405 oznacza samą stronę (np. GitHub Pages) bez serwera zamówień.
+    const noServer = !data && [404, 405, 501].includes(res.status);
+    const err = new Error(noServer
+      ? 'Ta strona nie ma podłączonego serwera zamówień. Wpisz „demo", aby otworzyć wersję pokazową.'
+      : (data && data.error) || `Błąd serwera (${res.status}).`);
     err.status = res.status;
     throw err;
   }
-  return data;
+  return data || {};
 }
 
 // h('div', { class: 'x', onclick: fn }, 'tekst', element) — treść zawsze trafia jako tekst.

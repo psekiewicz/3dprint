@@ -7,7 +7,12 @@ const PRINTERS = [
 const STATUSES = ['new', 'printing', 'done', 'collected', 'rejected', 'cancelled'];
 const KEY = 'demoDb';
 
+// Zapasowa pamięć na wypadek, gdy przeglądarka blokuje localStorage/IndexedDB (dane znikają po odświeżeniu).
+let memoryDb = null;
+const memoryFiles = new Map();
+
 function load() {
+  if (memoryDb) return memoryDb;
   try {
     const db = JSON.parse(localStorage.getItem(KEY));
     if (db && db.settings) return db;
@@ -29,7 +34,9 @@ function load() {
     },
   };
 }
-const save = (db) => localStorage.setItem(KEY, JSON.stringify(db));
+function save(db) {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); memoryDb = null; } catch { memoryDb = db; }
+}
 
 function fail(status, message) {
   const err = new Error(message);
@@ -51,7 +58,7 @@ function files(mode, action) {
     };
   });
 }
-export const demoFile = (id) => files('readonly', (store) => store.get(id));
+export const demoFile = (id) => (memoryFiles.has(id) ? memoryFiles.get(id) : files('readonly', (store) => store.get(id)).catch(() => undefined));
 
 const clean = (value, max) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const nameKey = (name) => name.toLowerCase();
@@ -96,7 +103,7 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
         cancelToken: crypto.randomUUID(),
       };
       try { await files('readwrite', (store) => store.put(body, order.id)); }
-      catch { fail(500, 'Przeglądarka nie pozwoliła zapisać pliku (np. tryb prywatny).'); }
+      catch { memoryFiles.set(order.id, body); }
       db.orders.push(order);
       save(db);
       return { order: publicOrder(order), cancelToken: order.cancelToken };
@@ -128,6 +135,7 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
       find();
       db.orders = db.orders.filter((o) => o.id !== id);
       save(db);
+      memoryFiles.delete(id);
       await files('readwrite', (store) => store.delete(id)).catch(() => {});
       return { ok: true };
 
