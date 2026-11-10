@@ -1,10 +1,16 @@
-# Zamówienia druku 3D dla klasy
+# Zamówienia druku 3D
 
-Prosta aplikacja, w której uczniowie zamawiają wydruki 3D na drukarkach **Prusa MINI+** i **Prusa MK4S**, a nauczyciel prowadzi kolejkę.
+Prosty sklepik z wydrukami 3D dla kolegów z klasy, na drukarki **Prusa MINI+** i **Prusa MK4S**.
 
-**Uczeń** (`/`): podaje imię i nazwisko oraz kod klasy, wgrywa plik STL lub 3MF, widzi podgląd 3D i informację, czy model mieści się w drukarce, wybiera drukarkę i filament, a potem śledzi status w kolejce.
+**Kupujący** (`/`): podaje imię i nazwisko oraz kod klasy, wgrywa plik STL lub 3MF, widzi podgląd 3D i informację, czy model mieści się w drukarce, wybiera drukarkę i filament, a potem śledzi w kolejce status, cenę i to, czy zamówienie jest opłacone.
 
-**Nauczyciel** (`/admin.html`): pobiera pliki, zmienia statusy, przypisuje drukarkę, pisze wiadomość do ucznia oraz ustawia kod klasy, listę filamentów, dostępne drukarki i limit zamówień na ucznia.
+**Sprzedawca** (`/admin.html`): pobiera pliki, wpisuje czas druku (z niego wylicza się cena), zmienia statusy, oznacza zapłatę, pisze wiadomość do kupującego oraz ustawia kod klasy, filamenty ze stawkami, dostępne drukarki i limit zamówień na osobę.
+
+## Cena
+
+**Cena = stawka filamentu (zł/min) × czas druku (min).**
+
+Stawkę każdego filamentu ustawiasz w panelu. Czas druku wpisujesz przy zamówieniu po pocięciu modelu w PrusaSlicer — cena wylicza się sama i od razu widzi ją kupujący. Zamówienie zapamiętuje stawkę z chwili złożenia, więc późniejsza zmiana cennika nie zmienia starych zamówień. Płatność odbywa się poza aplikacją (gotówka, BLIK); w panelu tylko zaznaczasz „zapłacone".
 
 ## Jak to jest zbudowane
 
@@ -17,7 +23,7 @@ GitHub Pages hostuje tylko statyczne strony — nie przyjmie plików ani nie zap
 
 ## Wersja pokazowa (bez serwera)
 
-Na samym GitHub Pages aplikację można obejrzeć bez Raspberry Pi: wpisz kod klasy **`demo`** (a w panelu nauczyciela hasło **`demo`**). Dane zapisują się wtedy tylko w tej jednej przeglądarce — uczeń i nauczyciel widzą te same zamówienia wyłącznie na tym samym urządzeniu. Do prawdziwej pracy z klasą potrzebny jest serwer.
+Na samym GitHub Pages aplikację można obejrzeć bez Raspberry Pi: wpisz kod klasy **`demo`** (a w panelu sprzedawcy hasło **`demo`**). Dane zapisują się wtedy tylko w tej jednej przeglądarce — kupujący i sprzedawca widzą te same zamówienia wyłącznie na tym samym urządzeniu. Do przyjmowania prawdziwych zamówień potrzebny jest serwer.
 
 ## Uruchomienie na Raspberry Pi
 
@@ -29,7 +35,7 @@ cd 3dprint
 node server/server.js
 ```
 
-Przy pierwszym uruchomieniu serwer wypisze **hasło nauczyciela** i **kod klasy** — zapisz je. Oba można potem zmienić w panelu nauczyciela. Zapomniane hasło ustawisz na nowo, uruchamiając serwer raz z `ADMIN_PASSWORD=nowehaslo node server/server.js`.
+Przy pierwszym uruchomieniu serwer wypisze **hasło sprzedawcy** i **kod klasy** — zapisz je. Oba można potem zmienić w panelu sprzedawcy. Zapomniane hasło ustawisz na nowo, uruchamiając serwer raz z `ADMIN_PASSWORD=nowehaslo node server/server.js`.
 
 Aplikacja działa pod adresem `http://<adres-ip-raspberry>:3000` dla wszystkich w tej samej sieci.
 
@@ -49,14 +55,14 @@ Plik usługi zakłada użytkownika `pi` i katalog `/home/pi/3dprint` — popraw 
 |---|---|---|
 | `PORT` | `3000` | Port serwera |
 | `DATA_DIR` | `./data` | Katalog z bazą i plikami modeli |
-| `ADMIN_PASSWORD` | — | Ustawia hasło nauczyciela przy starcie |
+| `ADMIN_PASSWORD` | — | Ustawia hasło sprzedawcy przy starcie |
 | `ALLOWED_ORIGIN` | `*` | Adres strony, która może korzystać z API (np. `https://psekiewicz.github.io`) |
 
 **Kopia zapasowa:** wystarczy skopiować katalog `data/`.
 
 ## Strona na GitHub Pages (opcjonalnie)
 
-Przydatne, gdy uczniowie mają zamawiać także spoza sieci szkolnej.
+Przydatne, gdy koledzy mają zamawiać także spoza sieci, w której stoi Raspberry Pi.
 
 1. W repozytorium: **Settings → Pages → Deploy from a branch**, gałąź `main`, katalog `/ (root)`.
 2. Wystaw Raspberry Pi pod publicznym adresem **HTTPS**, np. przez Cloudflare Tunnel albo Tailscale Funnel. Strona z GitHub Pages działa po HTTPS, więc przeglądarka zablokuje połączenie ze zwykłym `http://192.168…`.
@@ -66,11 +72,11 @@ Przydatne, gdy uczniowie mają zamawiać także spoza sieci szkolnej.
    ```
 4. Uruchom serwer z `ALLOWED_ORIGIN=https://psekiewicz.github.io`.
 
-Jeśli aplikacja ma działać tylko w szkole, ten krok można pominąć — wystarczy adres Raspberry Pi.
+Jeśli aplikacja ma działać tylko w jednej sieci, ten krok można pominąć — wystarczy adres Raspberry Pi.
 
 ## Dobrze wiedzieć
 
-- Limit zamówień liczy się po imieniu i nazwisku, więc uczeń może go obejść, wpisując inne dane — to zabezpieczenie „na uczciwość", nie przed sabotażem.
-- Zamówienie anulować może tylko uczeń na urządzeniu, z którego je złożył, i tylko dopóki ma status „Oczekuje".
+- Limit zamówień liczy się po imieniu i nazwisku, więc kupujący może go obejść, wpisując inne dane — to zabezpieczenie „na uczciwość", nie przed sabotażem.
+- Zamówienie anulować może tylko kupujący na urządzeniu, z którego je złożył, i tylko dopóki ma status „Oczekuje".
 - Wymiary liczone są w przeglądarce przy założeniu, że model jest w milimetrach.
 - Podgląd 3D korzysta z biblioteki [three.js](https://threejs.org) (licencja MIT), dołączonej w `vendor/`, więc działa też bez internetu.

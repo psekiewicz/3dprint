@@ -26,10 +26,10 @@ function load() {
       maxFileMB: 50,
       printers: { mini: true, mk4s: true },
       filaments: [
-        { id: 'f1', name: 'PLA czarny', color: '#1d1d1f', available: true },
-        { id: 'f2', name: 'PLA biały', color: '#f4f4f4', available: true },
-        { id: 'f3', name: 'PLA pomarańczowy', color: '#fa6831', available: true },
-        { id: 'f4', name: 'PETG przezroczysty', color: '#cfe8f3', available: true },
+        { id: 'f1', name: 'PLA czarny', color: '#1d1d1f', available: true, pricePerMinute: 0.05 },
+        { id: 'f2', name: 'PLA biały', color: '#f4f4f4', available: true, pricePerMinute: 0.05 },
+        { id: 'f3', name: 'PLA pomarańczowy', color: '#fa6831', available: true, pricePerMinute: 0.05 },
+        { id: 'f4', name: 'PETG przezroczysty', color: '#cfe8f3', available: true, pricePerMinute: 0.07 },
       ],
     },
   };
@@ -64,6 +64,19 @@ const clean = (value, max) => String(value ?? '').replace(/\s+/g, ' ').trim().sl
 const nameKey = (name) => name.toLowerCase();
 const publicOrder = ({ cancelToken, ...rest }) => rest;
 
+// Cena = stawka filamentu (zł/min) × czas druku (min).
+function setPrintTime(order, minutes, filaments) {
+  if (minutes === null || minutes === '') { order.printMinutes = null; order.price = null; return; }
+  const m = Math.round(Number(minutes));
+  if (!(m >= 1 && m <= 100000)) fail(400, 'Podaj czas druku w minutach (co najmniej 1).');
+  const current = filaments.find((f) => f.id === order.filament.id);
+  const rate = order.filament.pricePerMinute ?? (current ? current.pricePerMinute : 0) ?? 0;
+  order.printMinutes = m;
+  order.price = Math.round(m * rate * 100) / 100;
+}
+const cleanRate = (value) => { const r = Math.round(Number(value) * 1000) / 1000; return r >= 0 && r <= 100 ? r : 0; };
+
+
 export async function demoApi(path, { method = 'GET', headers = {}, json, body } = {}) {
   const db = load();
   const s = db.settings;
@@ -96,7 +109,8 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
         id: db.nextId++, name, title, fileName: clean(meta.fileName, 120), fileSize: body.size,
         dims: meta.dims ? meta.dims.map((d) => Math.round(d * 10) / 10) : null,
         quantity: Math.floor(meta.quantity), printer: meta.printer,
-        filament: { id: filament.id, name: filament.name, color: filament.color },
+        filament: { id: filament.id, name: filament.name, color: filament.color, pricePerMinute: cleanRate(filament.pricePerMinute) },
+        printMinutes: null, price: null, paid: false,
         notes: String(meta.notes ?? '').trim().slice(0, 500),
         status: 'new', assignedPrinter: null, teacherNote: '',
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -126,6 +140,8 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
       if (STATUSES.includes(json.status)) order.status = json.status;
       if (json.assignedPrinter !== undefined) order.assignedPrinter = json.assignedPrinter;
       if (json.teacherNote !== undefined) order.teacherNote = String(json.teacherNote).trim().slice(0, 500);
+      if (json.printMinutes !== undefined) setPrintTime(order, json.printMinutes, s.filaments);
+      if (json.paid !== undefined) order.paid = !!json.paid;
       order.updatedAt = new Date().toISOString();
       save(db);
       return { order: publicOrder(order) };
@@ -151,7 +167,7 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
         maxFileMB: Math.floor(json.maxFileMB),
         printers: Object.fromEntries(PRINTERS.map((p) => [p.id, !!json.printers[p.id]])),
         filaments: json.filaments
-          .map((f, i) => ({ id: f.id || `d${Date.now()}${i}`, name: clean(f.name, 40), color: f.color, available: !!f.available }))
+          .map((f, i) => ({ id: f.id || `d${Date.now()}${i}`, name: clean(f.name, 40), color: f.color, available: !!f.available, pricePerMinute: cleanRate(f.pricePerMinute) }))
           .filter((f) => f.name),
       };
       save(db);

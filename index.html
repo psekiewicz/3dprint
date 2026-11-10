@@ -29,7 +29,7 @@
       <input type="text" id="login-name" maxlength="60" autocomplete="name" required>
       <label for="login-code">Kod klasy</label>
       <input type="text" id="login-code" maxlength="40" autocomplete="off" autocapitalize="none" required>
-      <p class="hint">Kod klasy poda nauczyciel. Kod <strong>demo</strong> otwiera wersję pokazową.</p>
+      <p class="hint">Kod klasy dostaniesz od sprzedawcy. Kod <strong>demo</strong> otwiera wersję pokazową.</p>
       <div class="message error" id="login-error"></div>
       <div class="actions"><button class="primary">Dalej</button></div>
     </form>
@@ -55,12 +55,13 @@
 
           <label>Filament</label>
           <div class="choices" id="filaments"></div>
+          <p class="hint">Cena = stawka filamentu × czas druku. Dokładną cenę zobaczysz w kolejce, gdy sprzedawca przygotuje model do druku.</p>
 
           <label for="quantity">Liczba sztuk</label>
           <input type="number" id="quantity" min="1" max="10" value="1" required style="max-width:120px">
 
-          <label for="notes">Uwagi dla nauczyciela (opcjonalnie)</label>
-          <textarea id="notes" maxlength="500" placeholder="np. do projektu z fizyki, potrzebne na piątek"></textarea>
+          <label for="notes">Uwagi dla sprzedawcy (opcjonalnie)</label>
+          <textarea id="notes" maxlength="500" placeholder="np. potrzebne na piątek"></textarea>
         </div>
         <div>
           <label>Podgląd</label>

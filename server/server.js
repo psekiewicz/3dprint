@@ -52,18 +52,18 @@ if (fs.existsSync(DB_FILE)) {
       maxFileMB: 50,
       printers: { mini: true, mk4s: true },
       filaments: [
-        { id: 'f1', name: 'PLA czarny', color: '#1d1d1f', available: true },
-        { id: 'f2', name: 'PLA biały', color: '#f4f4f4', available: true },
-        { id: 'f3', name: 'PLA pomarańczowy', color: '#fa6831', available: true },
-        { id: 'f4', name: 'PETG przezroczysty', color: '#cfe8f3', available: true },
+        { id: 'f1', name: 'PLA czarny', color: '#1d1d1f', available: true, pricePerMinute: 0.05 },
+        { id: 'f2', name: 'PLA biały', color: '#f4f4f4', available: true, pricePerMinute: 0.05 },
+        { id: 'f3', name: 'PLA pomarańczowy', color: '#fa6831', available: true, pricePerMinute: 0.05 },
+        { id: 'f4', name: 'PETG przezroczysty', color: '#cfe8f3', available: true, pricePerMinute: 0.07 },
       ],
     },
   };
   saveNow();
   console.log('=== PIERWSZE URUCHOMIENIE ===');
-  console.log(`Hasło nauczyciela: ${password}`);
+  console.log(`Hasło sprzedawcy:  ${password}`);
   console.log(`Kod klasy:         ${db.settings.classCode}`);
-  console.log('Oba można zmienić w panelu nauczyciela (/admin.html).');
+  console.log('Oba można zmienić w panelu sprzedawcy (/admin.html).');
 }
 if (process.env.ADMIN_PASSWORD && !checkPassword(process.env.ADMIN_PASSWORD, db.settings.adminPassword)) {
   db.settings.adminPassword = hashPassword(process.env.ADMIN_PASSWORD);
@@ -127,6 +127,19 @@ function publicConfig() {
 }
 const publicOrder = ({ cancelToken, storedFile, ...rest }) => rest;
 
+// Cena = stawka filamentu (zł/min) × czas druku (min).
+function setPrintTime(order, minutes, filaments) {
+  if (minutes === null || minutes === '') { order.printMinutes = null; order.price = null; return; }
+  const m = Math.round(Number(minutes));
+  if (!(m >= 1 && m <= 100000)) fail(400, 'Podaj czas druku w minutach (co najmniej 1).');
+  const current = filaments.find((f) => f.id === order.filament.id);
+  const rate = order.filament.pricePerMinute ?? (current ? current.pricePerMinute : 0) ?? 0;
+  order.printMinutes = m;
+  order.price = Math.round(m * rate * 100) / 100;
+}
+const cleanRate = (value) => { const r = Math.round(Number(value) * 1000) / 1000; return r >= 0 && r <= 100 ? r : 0; };
+
+
 // ---------- autoryzacja ----------
 const sessions = new Map(); // token -> czas wygaśnięcia
 const loginFailures = new Map(); // ip -> { count, until }
@@ -186,7 +199,8 @@ function createOrder(req, res) {
     done = true;
     const order = {
       id, name, title, fileName, fileSize: size, dims, quantity, printer,
-      filament: { id: filament.id, name: filament.name, color: filament.color },
+      filament: { id: filament.id, name: filament.name, color: filament.color, pricePerMinute: cleanRate(filament.pricePerMinute) },
+      printMinutes: null, price: null, paid: false,
       notes: longText(meta.notes, 500),
       status: 'new', assignedPrinter: null, teacherNote: '',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -269,6 +283,8 @@ async function api(req, res, url) {
         order.assignedPrinter = body.assignedPrinter;
       }
       if (body.teacherNote !== undefined) order.teacherNote = longText(body.teacherNote, 500);
+      if (body.printMinutes !== undefined) setPrintTime(order, body.printMinutes, db.settings.filaments);
+      if (body.paid !== undefined) order.paid = !!body.paid;
       order.updatedAt = new Date().toISOString();
       saveNow();
       return send(res, 200, { order: publicOrder(order) });
@@ -318,6 +334,7 @@ async function api(req, res, url) {
         name: text(f.name, 40),
         color: /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : '#888888',
         available: !!f.available,
+        pricePerMinute: cleanRate(f.pricePerMinute),
       })).filter((f) => f.name);
       if (body.newPassword) {
         if (String(body.newPassword).length < 6) fail(400, 'Hasło musi mieć co najmniej 6 znaków.');

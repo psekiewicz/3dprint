@@ -1,4 +1,4 @@
-import { api, h, $, DEMO_CODE, setDemo, showDemoBanner, fits, swatch, statusBadge, formatDate, formatDims, formatSize } from './common.js';
+import { api, h, $, DEMO_CODE, setDemo, showDemoBanner, fits, swatch, formatRate, formatPrice, priceText, statusBadge, formatDate, formatDims, formatSize } from './common.js';
 
 const store = {
   get: (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
@@ -89,8 +89,8 @@ function renderChoices() {
   const selectedFilament = document.querySelector('input[name=filament]:checked')?.value;
   const available = config.filaments.filter((f) => f.available);
   $('#filaments').replaceChildren(...(available.length
-    ? available.map((f) => choice('filament', f.id, [swatch(f.color), f.name], { checked: f.id === selectedFilament }))
-    : [h('span', { class: 'hint' }, 'Brak dostępnych filamentów — zapytaj nauczyciela.')]));
+    ? available.map((f) => choice('filament', f.id, [swatch(f.color), `${f.name} · ${formatRate(f.pricePerMinute)}`], { checked: f.id === selectedFilament }))
+    : [h('span', { class: 'hint' }, 'Brak dostępnych filamentów — zapytaj sprzedawcę.')]));
 
   const mine = orders.filter((o) => sameName(o.name, user.name) && isActive(o)).length;
   $('#limit-info').textContent = `Twoje aktywne zamówienia: ${mine} z ${config.maxActive}`;
@@ -255,7 +255,9 @@ function renderOrders() {
         mine && o.status === 'new' && tokens[o.id] && h('button', { class: 'small danger', type: 'button', onclick: () => cancelOrder(o) }, 'Anuluj')),
       h('div', { class: 'order-meta' },
         `${o.name} · ${formatDate(o.createdAt)} · ${printer} · `, swatch(o.filament.color), ` ${o.filament.name} · ${o.quantity} szt.`),
-      o.teacherNote && h('div', { class: 'order-note' }, `Nauczyciel: ${o.teacherNote}`));
+      o.price != null && h('div', { class: 'order-price' }, priceText(o), ' ',
+        h('span', { class: `badge ${o.paid ? 'badge-done' : 'badge-new'}` }, o.paid ? 'Zapłacone' : 'Do zapłaty')),
+      o.teacherNote && h('div', { class: 'order-note' }, `Sprzedawca: ${o.teacherNote}`));
   }) : [h('div', { class: 'empty' }, 'Brak zamówień.')]));
 }
 

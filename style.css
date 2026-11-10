@@ -160,10 +160,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .tabs button.active { border-color: var(--accent); color: var(--accent); }
-.admin-row { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 8px; margin-top: 10px; }
+.admin-row { display: grid; grid-template-columns: 1fr 1fr 1fr 2fr; gap: 8px; margin-top: 10px; }
 @media (max-width: 760px) { .admin-row { grid-template-columns: 1fr; } }
 .admin-row label { margin: 0 0 2px; font-size: 0.8rem; color: var(--muted); }
-.filament-row { display: grid; grid-template-columns: 44px 1fr auto auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.filament-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.filament-row input[type=text] { flex: 1 1 90px; min-width: 0; width: auto; }
+.filament-row input.rate { width: 76px; }
+.filament-row .hint, .filament-row .check { margin: 0; }
+.order-price { font-weight: 600; margin-top: 6px; }
+.actions .order-price { margin: 0; flex: 1; min-width: 200px; }
 .filament-row input[type=color] { width: 44px; height: 38px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .check { display: flex; align-items: center; gap: 6px; font-weight: 500; margin: 6px 0; }
 .check input { width: 18px; height: 18px; accent-color: var(--accent); }

@@ -1,4 +1,4 @@
-// Wspólne funkcje strony ucznia i panelu nauczyciela.
+// Wspólne funkcje strony kupującego i panelu sprzedawcy.
 export const API = (window.API_URL || '').replace(/\/$/, '');
 
 export const STATUS = {
@@ -10,7 +10,7 @@ export const STATUS = {
   cancelled: 'Anulowane',
 };
 
-// Wersja pokazowa: włącza ją kod klasy (albo hasło nauczyciela) „demo".
+// Wersja pokazowa: włącza ją kod klasy (albo hasło sprzedawcy) „demo".
 export const DEMO_CODE = 'demo';
 // Flaga jest też trzymana w pamięci, bo niektóre przeglądarki (tryb prywatny, blokada danych witryn) nie pozwalają na localStorage.
 let demoInMemory = false;
@@ -85,6 +85,17 @@ export function fits(dims, volume) {
   const rotations = [[y, x, z], [x, z, y], [z, y, x], [y, z, x], [z, x, y]];
   return rotations.some(ok) ? 'rotated' : 'no';
 }
+
+const zl = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' });
+export const formatPrice = (value) => zl.format(value);
+export const formatRate = (rate) => `${(rate || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} zł/min`;
+export function formatMinutes(minutes) {
+  const hours = Math.floor(minutes / 60);
+  return hours ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
+}
+// Opis ceny zamówienia albo null, gdy sprzedawca jeszcze jej nie ustalił.
+export const priceText = (o) =>
+  (o.price == null ? null : `Cena: ${formatPrice(o.price)} (czas druku ${formatMinutes(o.printMinutes)})`);
 
 export function swatch(color) {
   return h('span', { class: 'swatch', style: `background:${color}` });

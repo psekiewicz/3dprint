@@ -1,4 +1,4 @@
-import { API, api, h, $, DEMO_CODE, isDemo, setDemo, showDemoBanner, STATUS, fits, swatch, statusBadge, formatDate, formatDims, formatSize } from './common.js';
+import { API, api, h, $, DEMO_CODE, isDemo, setDemo, showDemoBanner, STATUS, fits, swatch, formatRate, formatPrice, priceText, statusBadge, formatDate, formatDims, formatSize } from './common.js';
 
 const PRINTERS = [
   { id: 'mini', name: 'Prusa MINI+', volume: [180, 180, 180] },
@@ -73,6 +73,10 @@ function renderOrders() {
       onclick: () => { filter = key; renderOrders(); },
     }, `${label} (${orders.filter(test).length})`)));
 
+  const live = orders.filter((o) => o.price != null && !['rejected', 'cancelled'].includes(o.status));
+  const sum = (list) => formatPrice(list.reduce((total, o) => total + o.price, 0));
+  $('#totals').textContent = `Do zapłaty: ${sum(live.filter((o) => !o.paid))} · Zapłacono: ${sum(live.filter((o) => o.paid))}`;
+
   const visible = orders.filter(FILTERS[filter][1]);
   visible.sort((a, b) => (['new', 'printing'].includes(filter) ? a.id - b.id : b.id - a.id));
   $('#orders').replaceChildren(...(visible.length ? visible.map(orderCard) : [h('div', { class: 'empty' }, 'Brak zamówień.')]));
@@ -88,13 +92,26 @@ function orderCard(o) {
     h('option', { value: '' }, '— nie przypisano —'),
     ...PRINTERS.map((p) => h('option', { value: p.id, selected: p.id === o.assignedPrinter }, p.name)));
   const note = h('input', { type: 'text', maxLength: 500, value: o.teacherNote, placeholder: 'np. model za cienki, popraw ścianki' });
+  const rate = o.filament.pricePerMinute || 0;
+  const minutes = h('input', { type: 'number', min: 1, step: 1, value: o.printMinutes ?? '', placeholder: 'z PrusaSlicer' });
+  const price = h('span', { class: 'order-price' });
+  const showPrice = () => {
+    const m = Math.round(Number(minutes.value));
+    price.textContent = m >= 1 ? `${formatRate(rate)} × ${m} min = ${formatPrice(Math.round(m * rate * 100) / 100)}` : `Stawka: ${formatRate(rate)}`;
+  };
+  minutes.addEventListener('input', showPrice);
+  showPrice();
+  const paid = h('input', { type: 'checkbox', checked: !!o.paid });
   const message = h('span', { class: 'hint' });
 
   const save = async () => {
     try {
       const { order } = await adminApi(`/api/admin/orders/${o.id}`, {
         method: 'PATCH',
-        json: { status: status.value, assignedPrinter: printer.value || null, teacherNote: note.value },
+        json: {
+          status: status.value, assignedPrinter: printer.value || null, teacherNote: note.value,
+          printMinutes: minutes.value === '' ? null : Number(minutes.value), paid: paid.checked,
+        },
       });
       orders = orders.map((x) => (x.id === order.id ? order : x));
       renderOrders();
@@ -110,11 +127,13 @@ function orderCard(o) {
       `${o.name} · ${formatDate(o.createdAt)} · chce: ${wanted} · `, swatch(o.filament.color), ` ${o.filament.name} · ${o.quantity} szt.`),
     h('div', { class: 'order-meta' },
       `${o.fileName} (${formatSize(o.fileSize)}) · wymiary: ${formatDims(o.dims)}${fitInfo ? ` · mieści się — ${fitInfo}` : ''}`),
-    o.notes && h('div', { class: 'order-note' }, `Uwagi ucznia: ${o.notes}`),
+    o.notes && h('div', { class: 'order-note' }, `Uwagi kupującego: ${o.notes}`),
     h('div', { class: 'admin-row' },
       h('div', {}, h('label', {}, 'Status'), status),
       h('div', {}, h('label', {}, 'Drukarka'), printer),
-      h('div', {}, h('label', {}, 'Wiadomość dla ucznia'), note)),
+      h('div', {}, h('label', {}, 'Czas druku (min)'), minutes),
+      h('div', {}, h('label', {}, 'Wiadomość dla kupującego'), note)),
+    h('div', { class: 'actions' }, price, h('label', { class: 'check' }, paid, 'zapłacone')),
     h('div', { class: 'actions' },
       h('button', { type: 'button', class: 'small primary', onclick: save }, 'Zapisz'),
       o.status === 'new' && quick('▶ Drukuj', 'printing'),
@@ -153,10 +172,12 @@ async function remove(o, message) {
 }
 
 // ---------- ustawienia ----------
-function filamentRow(f = { id: '', name: '', color: '#fa6831', available: true }) {
+function filamentRow(f = { id: '', name: '', color: '#fa6831', available: true, pricePerMinute: 0.05 }) {
   const row = h('div', { class: 'filament-row' },
     h('input', { type: 'color', value: f.color, title: 'Kolor' }),
     h('input', { type: 'text', value: f.name, maxLength: 40, placeholder: 'np. PLA czerwony', required: true }),
+    h('input', { type: 'number', class: 'rate', min: 0, max: 100, step: 0.001, value: f.pricePerMinute ?? 0, title: 'Stawka w zł za minutę druku', required: true }),
+    h('span', { class: 'hint' }, 'zł/min'),
     h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: f.available }), 'dostępny'),
     h('button', { type: 'button', class: 'small danger', title: 'Usuń filament', onclick: () => row.remove() }, '✕'));
   row.dataset.id = f.id;
@@ -189,6 +210,7 @@ $('#settings-form').addEventListener('submit', async (event) => {
       id: row.dataset.id,
       color: row.querySelector('input[type=color]').value,
       name: row.querySelector('input[type=text]').value,
+      pricePerMinute: Number(row.querySelector('input.rate').value),
       available: row.querySelector('input[type=checkbox]').checked,
     })),
     newPassword: $('#new-password').value,

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Druk 3D — panel nauczyciela</title>
+  <title>Druk 3D — panel sprzedawcy</title>
   <link rel="stylesheet" href="style.css">
   <script src="config.js"></script>
   <script type="module" src="admin.js"></script>
@@ -12,7 +12,7 @@
 <body>
   <header class="top">
     <div class="inner">
-      <h1>Druk 3D — panel nauczyciela</h1>
+      <h1>Druk 3D — panel sprzedawcy</h1>
       <button class="small" id="logout" hidden>Wyloguj</button>
     </div>
   </header>
@@ -22,7 +22,7 @@
   <main id="login" hidden>
     <form class="card narrow" id="login-form">
       <h2>Logowanie</h2>
-      <label for="password">Hasło nauczyciela</label>
+      <label for="password">Hasło sprzedawcy</label>
       <input type="password" id="password" autocomplete="current-password" required>
       <p class="hint">Hasło <strong>demo</strong> otwiera wersję pokazową.</p>
       <div class="message error" id="login-error"></div>
@@ -34,6 +34,7 @@
     <section class="card">
       <h2>Zamówienia</h2>
       <div class="tabs" id="tabs"></div>
+      <p class="hint" id="totals"></p>
       <div class="orders" id="orders"></div>
     </section>
 
@@ -43,9 +44,9 @@
         <div>
           <label for="class-code">Kod klasy</label>
           <input type="text" id="class-code" maxlength="40" required>
-          <p class="hint">Uczniowie wpisują go przy pierwszym wejściu. Wielkość liter nie ma znaczenia.</p>
+          <p class="hint">Kupujący wpisują go przy pierwszym wejściu. Wielkość liter nie ma znaczenia.</p>
 
-          <label for="max-active">Limit aktywnych zamówień na ucznia</label>
+          <label for="max-active">Limit aktywnych zamówień na osobę</label>
           <input type="number" id="max-active" min="1" max="50" required>
 
           <label for="max-file">Maksymalny rozmiar pliku (MB)</label>
@@ -54,11 +55,12 @@
           <label>Dostępne drukarki</label>
           <div id="printers"></div>
 
-          <label for="new-password">Nowe hasło nauczyciela</label>
+          <label for="new-password">Nowe hasło sprzedawcy</label>
           <input type="password" id="new-password" autocomplete="new-password" placeholder="zostaw puste, aby nie zmieniać">
         </div>
         <div>
-          <label>Filamenty</label>
+          <label>Filamenty i stawki</label>
+          <p class="hint">Stawka w zł za minutę druku. Cena zamówienia = stawka × czas druku.</p>
           <div id="filaments"></div>
           <button type="button" class="small" id="add-filament">+ Dodaj filament</button>
         </div>
