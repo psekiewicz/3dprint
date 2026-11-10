@@ -1,0 +1,74 @@
+// Wspólne funkcje strony ucznia i panelu nauczyciela.
+export const API = (window.API_URL || '').replace(/\/$/, '');
+
+export const STATUS = {
+  new: 'Oczekuje',
+  printing: 'Drukuje się',
+  done: 'Gotowe do odbioru',
+  collected: 'Odebrane',
+  rejected: 'Odrzucone',
+  cancelled: 'Anulowane',
+};
+
+export async function api(path, { method = 'GET', headers = {}, json, body } = {}) {
+  let res;
+  try {
+    res = await fetch(API + path, {
+      method,
+      headers: { ...(json ? { 'Content-Type': 'application/json' } : {}), ...headers },
+      body: json ? JSON.stringify(json) : body,
+    });
+  } catch {
+    throw new Error('Brak połączenia z serwerem. Sprawdź, czy jesteś w sieci szkolnej.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || `Błąd serwera (${res.status}).`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+// h('div', { class: 'x', onclick: fn }, 'tekst', element) — treść zawsze trafia jako tekst.
+export function h(tag, props = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value === false || value == null) continue;
+    if (key.startsWith('on')) el.addEventListener(key.slice(2), value);
+    else if (key === 'class') el.className = value;
+    else if (key === 'style') el.style.cssText = value;
+    else if (key in el && key !== 'list') el[key] = value;
+    else el.setAttribute(key, value === true ? '' : value);
+  }
+  el.append(...children.flat().filter((c) => c != null && c !== false));
+  return el;
+}
+
+export const $ = (selector) => document.querySelector(selector);
+
+export const formatDate = (iso) =>
+  new Date(iso).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+export const formatSize = (bytes) =>
+  bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} kB`;
+
+export const formatDims = (dims) => (dims ? `${dims.map((d) => d.toFixed(1)).join(' × ')} mm` : 'nieznane');
+
+// Czy model mieści się w drukarce: 'yes', 'rotated' (po obróceniu o 90°) albo 'no'.
+export function fits(dims, volume) {
+  if (!dims) return 'yes';
+  const ok = (d) => d[0] <= volume[0] && d[1] <= volume[1] && d[2] <= volume[2];
+  if (ok(dims)) return 'yes';
+  const [x, y, z] = dims;
+  const rotations = [[y, x, z], [x, z, y], [z, y, x], [y, z, x], [z, x, y]];
+  return rotations.some(ok) ? 'rotated' : 'no';
+}
+
+export function swatch(color) {
+  return h('span', { class: 'swatch', style: `background:${color}` });
+}
+
+export function statusBadge(status) {
+  return h('span', { class: `badge badge-${status}` }, STATUS[status] || status);
+}

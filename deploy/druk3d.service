@@ -1,0 +1,15 @@
+[Unit]
+Description=Zamowienia druku 3D
+After=network.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/3dprint
+ExecStart=/usr/bin/node server/server.js
+Environment=PORT=3000
+# Gdy strona jest na GitHub Pages, ogranicz dostep do API do jej adresu:
+# Environment=ALLOWED_ORIGIN=https://psekiewicz.github.io
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
