@@ -11,7 +11,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const WEB_DIR = ROOT;
 // Strona leży w głównym katalogu repozytorium, więc serwujemy tylko te pliki (nie data/, server/ ani .git).
-const WEB_FILES = ['/index.html', '/admin.html', '/app.js', '/admin.js', '/common.js', '/viewer.js', '/config.js', '/style.css'];
+const WEB_FILES = ['/index.html', '/admin.html', '/app.js', '/admin.js', '/common.js', '/demo.js', '/viewer.js', '/config.js', '/style.css'];
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
 

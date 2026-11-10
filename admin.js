@@ -1,4 +1,4 @@
-import { API, api, h, $, STATUS, fits, swatch, statusBadge, formatDate, formatDims, formatSize } from './common.js';
+import { API, api, h, $, DEMO_CODE, isDemo, setDemo, showDemoBanner, STATUS, fits, swatch, statusBadge, formatDate, formatDims, formatSize } from './common.js';
 
 const PRINTERS = [
   { id: 'mini', name: 'Prusa MINI+', volume: [180, 180, 180] },
@@ -37,6 +37,7 @@ function showLogin() {
 $('#login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   $('#login-error').textContent = '';
+  setDemo($('#password').value === DEMO_CODE);
   try {
     token = (await api('/api/admin/login', { method: 'POST', json: { password: $('#password').value } })).token;
     sessionStorage.setItem('adminToken', token);
@@ -126,10 +127,17 @@ function orderCard(o) {
 
 async function download(o, message) {
   try {
-    const res = await fetch(`${API}/api/admin/orders/${o.id}/file`, { headers: auth() });
-    if (res.status === 401) return showLogin();
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Nie udało się pobrać pliku.');
-    const url = URL.createObjectURL(await res.blob());
+    let blob;
+    if (isDemo()) {
+      blob = await (await import('./demo.js')).demoFile(o.id);
+      if (!blob) throw new Error('Plik został usunięty.');
+    } else {
+      const res = await fetch(`${API}/api/admin/orders/${o.id}/file`, { headers: auth() });
+      if (res.status === 401) return showLogin();
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Nie udało się pobrać pliku.');
+      blob = await res.blob();
+    }
+    const url = URL.createObjectURL(blob);
     h('a', { href: url, download: `${o.id}-${o.fileName}` }).click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   } catch (err) { message.textContent = err.message; }
@@ -201,4 +209,5 @@ setInterval(async () => {
   try { orders = (await adminApi('/api/admin/orders')).orders; renderOrders(); } catch { /* spróbujemy ponownie */ }
 }, 30000);
 
+showDemoBanner();
 start();

@@ -50,6 +50,7 @@ h2 { font-size: 1.1rem; margin: 0 0 12px; }
   border-radius: var(--radius);
   padding: 16px;
 }
+.demo-banner { background: var(--accent); color: var(--accent-text); text-align: center; padding: 6px 16px; font-size: 0.9rem; font-weight: 600; }
 .narrow { max-width: 420px; margin: 40px auto; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }

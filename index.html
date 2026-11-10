@@ -20,6 +20,8 @@
     </div>
   </header>
 
+  <div class="demo-banner" id="demo-banner" hidden>Wersja pokazowa — dane zapisują się tylko w tej przeglądarce i nikt inny ich nie zobaczy.</div>
+
   <main id="login" hidden>
     <form class="card narrow" id="login-form">
       <h2>Kto zamawia?</h2>
@@ -27,7 +29,7 @@
       <input type="text" id="login-name" maxlength="60" autocomplete="name" required>
       <label for="login-code">Kod klasy</label>
       <input type="text" id="login-code" maxlength="40" autocomplete="off" autocapitalize="none" required>
-      <p class="hint">Kod klasy poda nauczyciel.</p>
+      <p class="hint">Kod klasy poda nauczyciel. Kod <strong>demo</strong> otwiera wersję pokazową.</p>
       <div class="message error" id="login-error"></div>
       <div class="actions"><button class="primary">Dalej</button></div>
     </form>

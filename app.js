@@ -1,4 +1,4 @@
-import { api, h, $, fits, swatch, statusBadge, formatDate, formatDims, formatSize } from './common.js';
+import { api, h, $, DEMO_CODE, setDemo, showDemoBanner, fits, swatch, statusBadge, formatDate, formatDims, formatSize } from './common.js';
 
 const store = {
   get: (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
@@ -31,6 +31,7 @@ $('#login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const candidate = { name: $('#login-name').value.trim().replace(/\s+/g, ' '), code: $('#login-code').value.trim() };
   if (candidate.name.length < 3) { $('#login-error').textContent = 'Podaj imię i nazwisko.'; return; }
+  setDemo(candidate.code.toLowerCase() === DEMO_CODE);
   try {
     await api('/api/check-code', { method: 'POST', headers: { 'X-Class-Code': encodeURIComponent(candidate.code) } });
     user = candidate;
@@ -274,4 +275,5 @@ setInterval(() => {
   if (user && !$('#app').hidden && !document.hidden) loadOrders().then(renderChoices).catch(() => {});
 }, 30000);
 
+showDemoBanner();
 start();

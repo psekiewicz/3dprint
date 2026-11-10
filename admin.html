@@ -17,11 +17,14 @@
     </div>
   </header>
 
+  <div class="demo-banner" id="demo-banner" hidden>Wersja pokazowa — dane zapisują się tylko w tej przeglądarce i nikt inny ich nie zobaczy.</div>
+
   <main id="login" hidden>
     <form class="card narrow" id="login-form">
       <h2>Logowanie</h2>
       <label for="password">Hasło nauczyciela</label>
       <input type="password" id="password" autocomplete="current-password" required>
+      <p class="hint">Hasło <strong>demo</strong> otwiera wersję pokazową.</p>
       <div class="message error" id="login-error"></div>
       <div class="actions"><button class="primary">Zaloguj</button></div>
     </form>

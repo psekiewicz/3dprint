@@ -15,6 +15,10 @@ Prosta aplikacja, w której uczniowie zamawiają wydruki 3D na drukarkach **Prus
 
 GitHub Pages hostuje tylko statyczne strony — nie przyjmie plików ani nie zapamięta zamówień — dlatego dane zawsze trzyma Raspberry Pi.
 
+## Wersja pokazowa (bez serwera)
+
+Na samym GitHub Pages aplikację można obejrzeć bez Raspberry Pi: wpisz kod klasy **`demo`** (a w panelu nauczyciela hasło **`demo`**). Dane zapisują się wtedy tylko w tej jednej przeglądarce — uczeń i nauczyciel widzą te same zamówienia wyłącznie na tym samym urządzeniu. Do prawdziwej pracy z klasą potrzebny jest serwer.
+
 ## Uruchomienie na Raspberry Pi
 
 Potrzebny jest Node.js 18 lub nowszy (`node -v`). Na Raspberry Pi OS: `sudo apt install nodejs`.

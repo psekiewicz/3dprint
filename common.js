@@ -10,7 +10,21 @@ export const STATUS = {
   cancelled: 'Anulowane',
 };
 
-export async function api(path, { method = 'GET', headers = {}, json, body } = {}) {
+// Wersja pokazowa: włącza ją kod klasy (albo hasło nauczyciela) „demo".
+export const DEMO_CODE = 'demo';
+export const isDemo = () => { try { return localStorage.getItem('demo') === '1'; } catch { return false; } };
+export function setDemo(on) {
+  try { on ? localStorage.setItem('demo', '1') : localStorage.removeItem('demo'); } catch { /* tryb prywatny */ }
+  showDemoBanner();
+}
+export function showDemoBanner() {
+  const banner = document.querySelector('#demo-banner');
+  if (banner) banner.hidden = !isDemo();
+}
+
+export async function api(path, options = {}) {
+  if (isDemo()) return (await import('./demo.js')).demoApi(path, options);
+  const { method = 'GET', headers = {}, json, body } = options;
   let res;
   try {
     res = await fetch(API + path, {
