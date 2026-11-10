@@ -11,7 +11,7 @@ Prosta aplikacja, w której uczniowie zamawiają wydruki 3D na drukarkach **Prus
 | Część | Gdzie | Co robi |
 |---|---|---|
 | Serwer | `server/server.js` | API, zapis zamówień (`data/db.json`) i plików (`data/uploads/`). Czysty Node.js, bez instalowania paczek. |
-| Strona | `docs/` | Statyczne pliki HTML/JS. Serwuje je Raspberry Pi; można je też wystawić na GitHub Pages. |
+| Strona | główny katalog (`index.html`, `admin.html`, …) | Statyczne pliki HTML/JS. Serwuje je Raspberry Pi; można je też wystawić na GitHub Pages. |
 
 GitHub Pages hostuje tylko statyczne strony — nie przyjmie plików ani nie zapamięta zamówień — dlatego dane zawsze trzyma Raspberry Pi.
 
@@ -54,9 +54,9 @@ Plik usługi zakłada użytkownika `pi` i katalog `/home/pi/3dprint` — popraw 
 
 Przydatne, gdy uczniowie mają zamawiać także spoza sieci szkolnej.
 
-1. W repozytorium: **Settings → Pages → Deploy from a branch**, gałąź `main`, katalog `/docs`.
+1. W repozytorium: **Settings → Pages → Deploy from a branch**, gałąź `main`, katalog `/ (root)`.
 2. Wystaw Raspberry Pi pod publicznym adresem **HTTPS**, np. przez Cloudflare Tunnel albo Tailscale Funnel. Strona z GitHub Pages działa po HTTPS, więc przeglądarka zablokuje połączenie ze zwykłym `http://192.168…`.
-3. Wpisz ten adres w `docs/config.js`:
+3. Wpisz ten adres w `config.js`:
    ```js
    window.API_URL = 'https://twoj-adres-serwera';
    ```
@@ -69,4 +69,4 @@ Jeśli aplikacja ma działać tylko w szkole, ten krok można pominąć — wyst
 - Limit zamówień liczy się po imieniu i nazwisku, więc uczeń może go obejść, wpisując inne dane — to zabezpieczenie „na uczciwość", nie przed sabotażem.
 - Zamówienie anulować może tylko uczeń na urządzeniu, z którego je złożył, i tylko dopóki ma status „Oczekuje".
 - Wymiary liczone są w przeglądarce przy założeniu, że model jest w milimetrach.
-- Podgląd 3D korzysta z biblioteki [three.js](https://threejs.org) (licencja MIT), dołączonej w `docs/vendor/`, więc działa też bez internetu.
+- Podgląd 3D korzysta z biblioteki [three.js](https://threejs.org) (licencja MIT), dołączonej w `vendor/`, więc działa też bez internetu.

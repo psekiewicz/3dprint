@@ -9,7 +9,9 @@ const PORT = Number(process.env.PORT) || 3000;
 const ROOT = path.join(__dirname, '..');
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
-const WEB_DIR = path.join(ROOT, 'docs');
+const WEB_DIR = ROOT;
+// Strona leży w głównym katalogu repozytorium, więc serwujemy tylko te pliki (nie data/, server/ ani .git).
+const WEB_FILES = ['/index.html', '/admin.html', '/app.js', '/admin.js', '/common.js', '/viewer.js', '/config.js', '/style.css'];
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
 
@@ -344,7 +346,8 @@ function serveStatic(req, res, url) {
   try { rel = decodeURIComponent(url.pathname); } catch { return send(res, 400, { error: 'Zły adres.' }); }
   if (rel.endsWith('/')) rel += 'index.html';
   const file = path.join(WEB_DIR, rel);
-  if (!file.startsWith(WEB_DIR + path.sep)) return send(res, 403, { error: 'Brak dostępu.' });
+  const inVendor = file.startsWith(path.join(WEB_DIR, 'vendor') + path.sep);
+  if (!WEB_FILES.includes(rel) && !inVendor) return send(res, 404, { error: 'Nie znaleziono.' });
   fs.stat(file, (err, stat) => {
     if (err || !stat.isFile()) return send(res, 404, { error: 'Nie znaleziono.' });
     res.writeHead(200, {
