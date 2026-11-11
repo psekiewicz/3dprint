@@ -52,6 +52,7 @@ Maile wychodzą z Twojej skrzynki przez SMTP. Potrzebne zmienne (wzór w `.env.e
 | `SMTP_PASS` | | hasło do skrzynki |
 | `MAIL_FROM` | `Druk 3D <contact@pixelinventor.com>` | nadawca widoczny w mailu |
 | `MAIL_REPLY_TO` | | opcjonalnie: dokąd idą odpowiedzi |
+| `MAIL_BCC` | | ukryta kopia każdego maila; domyślnie na `SMTP_USER`, `off` wyłącza |
 | `PUBLIC_URL` | `https://druk.pixelinventor.com` | adres strony do linku w mailu |
 
 Skrzynkę zakładasz w panelu OVH: **Web Cloud → E-maile → (domena) → Konta e-mail → Utwórz konto**. Login SMTP to pełny adres, hasło to hasło tej skrzynki.
