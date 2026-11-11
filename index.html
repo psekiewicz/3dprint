@@ -16,7 +16,7 @@
     <div class="inner">
       <h1>Zamówienia druku 3D</h1>
       <span class="who" id="who"></span>
-      <button class="small" id="logout" hidden>Zmień osobę</button>
+      <button class="small" id="logout" hidden>Wyloguj</button>
     </div>
   </header>
 
@@ -24,14 +24,24 @@
 
   <main id="login" hidden>
     <form class="card narrow" id="login-form">
-      <h2>Kto zamawia?</h2>
+      <h2 id="login-title">Logowanie</h2>
       <label for="login-name">Imię i nazwisko</label>
-      <input type="text" id="login-name" maxlength="60" autocomplete="name" required>
-      <label for="login-code">Kod klasy</label>
-      <input type="text" id="login-code" maxlength="40" autocomplete="off" autocapitalize="none" required>
-      <p class="hint">Kod klasy dostaniesz od sprzedawcy. Kod <strong>demo</strong> otwiera wersję pokazową.</p>
+      <input type="text" id="login-name" maxlength="60" autocomplete="username" required>
+      <label for="login-password">Hasło</label>
+      <input type="password" id="login-password" minlength="6" maxlength="100" autocomplete="current-password" required>
+      <div id="register-fields" hidden>
+        <p class="hint">Co najmniej 6 znaków. Nie używaj hasła, którego używasz gdzie indziej.</p>
+        <label for="login-code">Kod klasy</label>
+        <input type="text" id="login-code" maxlength="40" autocomplete="off" autocapitalize="none">
+        <p class="hint">Dostaniesz go od sprzedawcy. Jest potrzebny tylko przy zakładaniu konta.</p>
+      </div>
+      <p class="hint" id="forgot">Nie pamiętasz hasła? Poproś sprzedawcę o ustawienie nowego.</p>
       <div class="message error" id="login-error"></div>
-      <div class="actions"><button class="primary">Dalej</button></div>
+      <div class="actions">
+        <button class="primary" id="login-submit">Zaloguj</button>
+        <button type="button" id="toggle-register">Załóż konto</button>
+      </div>
+      <div class="actions"><button type="button" class="small" id="open-demo">Otwórz wersję pokazową</button></div>
     </form>
   </main>
 

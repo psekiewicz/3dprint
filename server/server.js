@@ -45,6 +45,8 @@ if (fs.existsSync(DB_FILE)) {
   db = {
     nextId: 1,
     orders: [],
+    users: [],
+    nextUserId: 1,
     settings: {
       classCode: randomCode(6).toLowerCase(),
       adminPassword: hashPassword(password),
@@ -65,6 +67,11 @@ if (fs.existsSync(DB_FILE)) {
   console.log(`Kod klasy:         ${db.settings.classCode}`);
   console.log('Oba można zmienić w panelu sprzedawcy (/admin.html).');
 }
+// uzupełnienie baz utworzonych przez starsze wersje
+db.users ||= [];
+db.nextUserId ||= 1;
+if (!db.settings.secret) { db.settings.secret = crypto.randomBytes(32).toString('hex'); saveNow(); }
+
 if (process.env.ADMIN_PASSWORD && !checkPassword(process.env.ADMIN_PASSWORD, db.settings.adminPassword)) {
   db.settings.adminPassword = hashPassword(process.env.ADMIN_PASSWORD);
   saveNow();
@@ -149,6 +156,29 @@ function requireClass(req) {
   const code = header(req, 'x-class-code').trim().toLowerCase();
   if (!code || !safeEqual(code, db.settings.classCode.toLowerCase())) fail(401, 'Niepoprawny kod klasy.');
 }
+// Token konta: nie wygasa, ale przestaje działać po zmianie hasła.
+const userToken = (user) =>
+  `${user.id}.${crypto.createHmac('sha256', db.settings.secret).update(`${user.id}:${user.password}`).digest('hex')}`;
+function requireUser(req) {
+  const token = (req.headers.authorization || '').replace(/^Bearer /, '');
+  const user = db.users.find((u) => u.id === Number(token.split('.')[0]));
+  if (!user || !safeEqual(token, userToken(user))) fail(401, 'Zaloguj się ponownie.');
+  return user;
+}
+// Blokada po 5 nieudanych próbach logowania z jednego adresu.
+function throttle(req) {
+  const ip = req.socket.remoteAddress;
+  const f = loginFailures.get(ip);
+  if (f && f.until > Date.now()) fail(429, 'Za dużo prób. Spróbuj za minutę.');
+  return {
+    failed() {
+      const count = (f ? f.count : 0) + 1;
+      loginFailures.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0 });
+    },
+    ok() { loginFailures.delete(ip); },
+  };
+}
+const publicUser = (user) => ({ id: user.id, name: user.name, createdAt: user.createdAt });
 function requireAdmin(req) {
   const token = (req.headers.authorization || '').replace(/^Bearer /, '');
   const expires = sessions.get(token);
@@ -157,12 +187,12 @@ function requireAdmin(req) {
 
 // ---------- obsługa zamówień ----------
 function createOrder(req, res) {
-  requireClass(req);
+  const user = requireUser(req);
   let meta;
   try { meta = JSON.parse(header(req, 'x-order')); } catch { fail(400, 'Brak danych zamówienia.'); }
   const s = db.settings;
 
-  const name = text(meta.name, 60);
+  const name = user.name;
   const title = text(meta.title, 80);
   const fileName = text(meta.fileName, 120).replace(/[\\/]/g, '_');
   const ext = fileName.split('.').pop().toLowerCase();
@@ -171,7 +201,6 @@ function createOrder(req, res) {
   const filament = s.filaments.find((f) => f.id === meta.filament && f.available);
   const size = Number(req.headers['content-length']);
 
-  if (name.length < 3) fail(400, 'Podaj imię i nazwisko.');
   if (!title) fail(400, 'Podaj nazwę wydruku.');
   if (!EXTENSIONS.includes(ext)) fail(400, 'Dozwolone są tylko pliki STL i 3MF.');
   if (!(quantity >= 1 && quantity <= 10)) fail(400, 'Liczba sztuk musi być od 1 do 10.');
@@ -179,7 +208,7 @@ function createOrder(req, res) {
   if (!filament) fail(400, 'Wybierz dostępny filament.');
   if (!(size > 0)) fail(400, 'Brak pliku z modelem.');
   if (size > s.maxFileMB * 1024 * 1024) fail(413, `Plik jest za duży (limit ${s.maxFileMB} MB).`);
-  const active = db.orders.filter((o) => nameKey(o.name) === nameKey(name) && ACTIVE.includes(o.status)).length;
+  const active = db.orders.filter((o) => o.userId === user.id && ACTIVE.includes(o.status)).length;
   if (active >= s.maxActive) fail(429, `Masz już ${active} aktywne zamówienia (limit: ${s.maxActive}). Poczekaj, aż któreś zostanie wydrukowane.`);
 
   const dims = Array.isArray(meta.dims) && meta.dims.length === 3 && meta.dims.every((d) => Number.isFinite(d) && d >= 0)
@@ -198,17 +227,17 @@ function createOrder(req, res) {
     if (done) return;
     done = true;
     const order = {
-      id, name, title, fileName, fileSize: size, dims, quantity, printer,
+      id, userId: user.id, name, title, fileName, fileSize: size, dims, quantity, printer,
       filament: { id: filament.id, name: filament.name, color: filament.color, pricePerMinute: cleanRate(filament.pricePerMinute) },
       printMinutes: null, price: null, paid: false,
       notes: longText(meta.notes, 500),
       status: 'new', assignedPrinter: null, teacherNote: '',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      cancelToken: crypto.randomBytes(16).toString('hex'), storedFile,
+      storedFile,
     };
     db.orders.push(order);
     saveNow();
-    send(res, 201, { order: publicOrder(order), cancelToken: order.cancelToken });
+    send(res, 201, { order: publicOrder(order) });
   });
   req.pipe(out);
 }
@@ -227,22 +256,41 @@ async function api(req, res, url) {
     case 'GET /api/config':
       return send(res, 200, publicConfig());
 
-    case 'POST /api/check-code':
+    case 'POST /api/register': {
       requireClass(req);
-      return send(res, 200, { ok: true });
+      const body = await readJson(req);
+      const name = text(body.name, 60);
+      const password = String(body.password || '');
+      if (name.length < 3) fail(400, 'Podaj imię i nazwisko.');
+      if (password.length < 6 || password.length > 100) fail(400, 'Hasło musi mieć co najmniej 6 znaków.');
+      if (db.users.some((u) => nameKey(u.name) === nameKey(name))) fail(409, 'Takie konto już istnieje. Zaloguj się albo poproś sprzedawcę o nowe hasło.');
+      if (db.users.length >= 500) fail(403, 'Osiągnięto limit kont.');
+      const user = { id: db.nextUserId++, name, password: hashPassword(password), createdAt: new Date().toISOString() };
+      db.users.push(user);
+      saveNow();
+      return send(res, 201, { user: publicUser(user), token: userToken(user) });
+    }
+
+    case 'POST /api/login': {
+      const attempt = throttle(req);
+      const body = await readJson(req);
+      const user = db.users.find((u) => nameKey(u.name) === nameKey(text(body.name, 60)));
+      if (!user || !checkPassword(body.password || '', user.password)) { attempt.failed(); fail(401, 'Niepoprawne imię i nazwisko lub hasło.'); }
+      attempt.ok();
+      return send(res, 200, { user: publicUser(user), token: userToken(user) });
+    }
 
     case 'GET /api/orders':
-      requireClass(req);
+      requireUser(req);
       return send(res, 200, { orders: db.orders.map(publicOrder) });
 
     case 'POST /api/orders':
       return createOrder(req, res);
 
     case 'POST /api/orders/:id/cancel': {
-      requireClass(req);
-      const body = await readJson(req);
+      const user = requireUser(req);
       const order = findOrder(id);
-      if (!body.token || !safeEqual(body.token, order.cancelToken)) fail(403, 'To zamówienie można anulować tylko z urządzenia, z którego zostało złożone.');
+      if (order.userId !== user.id) fail(403, 'To nie jest Twoje zamówienie.');
       if (order.status !== 'new') fail(409, 'Tego zamówienia nie da się już anulować.');
       order.status = 'cancelled';
       order.updatedAt = new Date().toISOString();
@@ -251,16 +299,10 @@ async function api(req, res, url) {
     }
 
     case 'POST /api/admin/login': {
-      const ip = req.socket.remoteAddress;
-      const f = loginFailures.get(ip);
-      if (f && f.until > Date.now()) fail(429, 'Za dużo prób. Spróbuj za chwilę.');
+      const attempt = throttle(req);
       const body = await readJson(req);
-      if (!checkPassword(body.password || '', db.settings.adminPassword)) {
-        const count = (f ? f.count : 0) + 1;
-        loginFailures.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0 });
-        fail(401, 'Niepoprawne hasło.');
-      }
-      loginFailures.delete(ip);
+      if (!checkPassword(body.password || '', db.settings.adminPassword)) { attempt.failed(); fail(401, 'Niepoprawne hasło.'); }
+      attempt.ok();
       const token = crypto.randomBytes(32).toString('hex');
       sessions.set(token, Date.now() + SESSION_MS);
       return send(res, 200, { token });
@@ -312,9 +354,32 @@ async function api(req, res, url) {
       return fs.createReadStream(file).pipe(res);
     }
 
+    case 'GET /api/admin/users':
+      requireAdmin(req);
+      return send(res, 200, { users: db.users.map(publicUser) });
+
+    case 'PUT /api/admin/users/:id/password': {
+      requireAdmin(req);
+      const body = await readJson(req);
+      const user = db.users.find((u) => u.id === Number(id));
+      if (!user) fail(404, 'Nie ma takiego konta.');
+      if (String(body.password || '').length < 6) fail(400, 'Hasło musi mieć co najmniej 6 znaków.');
+      user.password = hashPassword(String(body.password));
+      saveNow();
+      return send(res, 200, { ok: true });
+    }
+
+    case 'DELETE /api/admin/users/:id': {
+      requireAdmin(req);
+      if (!db.users.some((u) => u.id === Number(id))) fail(404, 'Nie ma takiego konta.');
+      db.users = db.users.filter((u) => u.id !== Number(id));
+      saveNow();
+      return send(res, 200, { ok: true });
+    }
+
     case 'GET /api/admin/settings': {
       requireAdmin(req);
-      const { adminPassword, ...settings } = db.settings;
+      const { adminPassword, secret, ...settings } = db.settings;
       return send(res, 200, { settings });
     }
 
@@ -345,7 +410,7 @@ async function api(req, res, url) {
         printers: Object.fromEntries(PRINTERS.map((p) => [p.id, !!(body.printers && body.printers[p.id])])),
       });
       saveNow();
-      const { adminPassword, ...settings } = s;
+      const { adminPassword, secret, ...settings } = s;
       return send(res, 200, { settings });
     }
   }

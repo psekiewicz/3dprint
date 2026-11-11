@@ -1,4 +1,4 @@
-import { API, api, h, $, DEMO_CODE, isDemo, setDemo, showDemoBanner, STATUS, fits, swatch, formatRate, formatPrice, priceText, statusBadge, formatDate, formatDims, formatSize } from './common.js';
+import { API, api, h, $, formatDate, DEMO_CODE, isDemo, setDemo, showDemoBanner, STATUS, fits, swatch, formatRate, formatPrice, priceText, statusBadge, formatDims, formatSize } from './common.js';
 
 const PRINTERS = [
   { id: 'mini', name: 'Prusa MINI+', volume: [180, 180, 180] },
@@ -14,6 +14,7 @@ const FILTERS = {
 
 let token = sessionStorage.getItem('adminToken');
 let orders = [];
+let users = [];
 let filter = 'new';
 
 const auth = () => ({ Authorization: `Bearer ${token}` });
@@ -52,8 +53,9 @@ $('#logout').addEventListener('click', showLogin);
 async function start() {
   if (!token) return showLogin();
   try {
-    const [o, s] = await Promise.all([adminApi('/api/admin/orders'), adminApi('/api/admin/settings')]);
+    const [o, s, u] = await Promise.all([adminApi('/api/admin/orders'), adminApi('/api/admin/settings'), adminApi('/api/admin/users')]);
     orders = o.orders;
+    users = u.users;
     fillSettings(s.settings);
   } catch (err) {
     if (err.status !== 401) { showLogin(); $('#login-error').textContent = err.message; }
@@ -63,6 +65,7 @@ async function start() {
   $('#app').hidden = false;
   $('#logout').hidden = false;
   renderOrders();
+  renderUsers();
 }
 
 // ---------- zamówienia ----------
@@ -169,6 +172,37 @@ async function remove(o, message) {
     orders = orders.filter((x) => x.id !== o.id);
     renderOrders();
   } catch (err) { message.textContent = err.message; }
+}
+
+// ---------- konta ----------
+function renderUsers() {
+  $('#users').replaceChildren(...(users.length ? users.map((u) => {
+    const message = h('span', { class: 'hint' });
+    const count = orders.filter((o) => o.userId === u.id).length;
+    return h('div', { class: 'order' },
+      h('div', { class: 'order-head' }, h('span', { class: 'title' }, u.name),
+        h('button', { type: 'button', class: 'small', onclick: () => resetPassword(u, message) }, 'Nowe hasło'),
+        h('button', { type: 'button', class: 'small danger', onclick: () => removeUser(u, message) }, 'Usuń')),
+      h('div', { class: 'order-meta' }, `konto od ${formatDate(u.createdAt)} · zamówień: ${count} `, message));
+  }) : [h('div', { class: 'empty' }, 'Nikt jeszcze nie założył konta.')]));
+}
+
+async function resetPassword(u, message) {
+  const password = prompt(`Nowe hasło dla: ${u.name} (co najmniej 6 znaków)`);
+  if (password == null) return;
+  try {
+    await adminApi(`/api/admin/users/${u.id}/password`, { method: 'PUT', json: { password } });
+    message.textContent = '· hasło zmienione';
+  } catch (err) { message.textContent = `· ${err.message}`; }
+}
+
+async function removeUser(u, message) {
+  if (!confirm(`Usunąć konto: ${u.name}? Ta osoba będzie mogła założyć je ponownie.`)) return;
+  try {
+    await adminApi(`/api/admin/users/${u.id}`, { method: 'DELETE' });
+    users = users.filter((x) => x.id !== u.id);
+    renderUsers();
+  } catch (err) { message.textContent = `· ${err.message}`; }
 }
 
 // ---------- ustawienia ----------

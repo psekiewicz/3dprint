@@ -20,6 +20,7 @@ function load() {
   return {
     nextId: 1,
     orders: [],
+    users: [],
     settings: {
       classCode: 'demo',
       maxActive: 2,
@@ -82,13 +83,36 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
   const s = db.settings;
   const route = `${method} ${path.replace(/\/\d+(?=\/|$)/, '/:id')}`;
   const id = Number((path.match(/\/(\d+)(?:\/|$)/) || [])[1]);
+  db.users ||= [];
+  // W wersji pokazowej konto to samo imię — hasło nie jest sprawdzane.
+  const me = () => db.users.find((u) => `Bearer demo-${u.id}` === headers.Authorization) || fail(401, 'Zaloguj się ponownie.');
   const find = () => db.orders.find((o) => o.id === id) || fail(404, 'Nie ma takiego zamówienia.');
 
   switch (route) {
     case 'GET /api/config':
       return { printers: PRINTERS.map((p) => ({ ...p, enabled: !!s.printers[p.id] })), filaments: s.filaments, maxActive: s.maxActive, maxFileMB: s.maxFileMB };
 
-    case 'POST /api/check-code':
+    case 'POST /api/register':
+    case 'POST /api/login': {
+      const name = clean(json.name, 60) || 'Gość';
+      let user = db.users.find((u) => nameKey(u.name) === nameKey(name));
+      if (!user) {
+        user = { id: db.users.reduce((max, u) => Math.max(max, u.id), 0) + 1, name, createdAt: new Date().toISOString() };
+        db.users.push(user);
+        save(db);
+      }
+      return { user, token: `demo-${user.id}` };
+    }
+
+    case 'GET /api/admin/users':
+      return { users: db.users };
+
+    case 'PUT /api/admin/users/:id/password':
+      return { ok: true };
+
+    case 'DELETE /api/admin/users/:id':
+      db.users = db.users.filter((u) => u.id !== id);
+      save(db);
       return { ok: true };
 
     case 'GET /api/orders':
@@ -97,16 +121,17 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
 
     case 'POST /api/orders': {
       const meta = JSON.parse(decodeURIComponent(headers['X-Order']));
-      const name = clean(meta.name, 60);
+      const user = me();
+      const name = user.name;
       const title = clean(meta.title, 80);
       const filament = s.filaments.find((f) => f.id === meta.filament && f.available);
       if (!title) fail(400, 'Podaj nazwę wydruku.');
       if (!(meta.quantity >= 1 && meta.quantity <= 10)) fail(400, 'Liczba sztuk musi być od 1 do 10.');
       if (!filament) fail(400, 'Wybierz dostępny filament.');
-      const active = db.orders.filter((o) => nameKey(o.name) === nameKey(name) && ['new', 'printing'].includes(o.status)).length;
+      const active = db.orders.filter((o) => o.userId === user.id && ['new', 'printing'].includes(o.status)).length;
       if (active >= s.maxActive) fail(429, `Masz już ${active} aktywne zamówienia (limit: ${s.maxActive}). Poczekaj, aż któreś zostanie wydrukowane.`);
       const order = {
-        id: db.nextId++, name, title, fileName: clean(meta.fileName, 120), fileSize: body.size,
+        id: db.nextId++, userId: user.id, name, title, fileName: clean(meta.fileName, 120), fileSize: body.size,
         dims: meta.dims ? meta.dims.map((d) => Math.round(d * 10) / 10) : null,
         quantity: Math.floor(meta.quantity), printer: meta.printer,
         filament: { id: filament.id, name: filament.name, color: filament.color, pricePerMinute: cleanRate(filament.pricePerMinute) },
@@ -114,18 +139,17 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
         notes: String(meta.notes ?? '').trim().slice(0, 500),
         status: 'new', assignedPrinter: null, teacherNote: '',
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        cancelToken: crypto.randomUUID(),
       };
       try { await files('readwrite', (store) => store.put(body, order.id)); }
       catch { memoryFiles.set(order.id, body); }
       db.orders.push(order);
       save(db);
-      return { order: publicOrder(order), cancelToken: order.cancelToken };
+      return { order: publicOrder(order) };
     }
 
     case 'POST /api/orders/:id/cancel': {
       const order = find();
-      if (json.token !== order.cancelToken) fail(403, 'To zamówienie można anulować tylko z urządzenia, z którego zostało złożone.');
+      if (order.userId !== me().id) fail(403, 'To nie jest Twoje zamówienie.');
       if (order.status !== 'new') fail(409, 'Tego zamówienia nie da się już anulować.');
       order.status = 'cancelled';
       save(db);

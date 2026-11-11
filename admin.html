@@ -38,13 +38,19 @@
       <div class="orders" id="orders"></div>
     </section>
 
+    <section class="card">
+      <h2>Konta kupujących</h2>
+      <p class="hint">Gdy ktoś zapomni hasła, ustaw mu nowe. Usunięcie konta nie usuwa jego zamówień.</p>
+      <div class="orders" id="users"></div>
+    </section>
+
     <form class="card" id="settings-form">
       <h2>Ustawienia</h2>
       <div class="grid2">
         <div>
           <label for="class-code">Kod klasy</label>
           <input type="text" id="class-code" maxlength="40" required>
-          <p class="hint">Kupujący wpisują go przy pierwszym wejściu. Wielkość liter nie ma znaczenia.</p>
+          <p class="hint">Kupujący wpisują go tylko przy zakładaniu konta. Wielkość liter nie ma znaczenia.</p>
 
           <label for="max-active">Limit aktywnych zamówień na osobę</label>
           <input type="number" id="max-active" min="1" max="50" required>

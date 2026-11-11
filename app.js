@@ -1,11 +1,12 @@
-import { api, h, $, DEMO_CODE, setDemo, showDemoBanner, fits, swatch, formatRate, formatPrice, priceText, statusBadge, formatDate, formatDims, formatSize } from './common.js';
+import { api, h, $, setDemo, showDemoBanner, fits, swatch, formatRate, formatPrice, priceText, statusBadge, formatDate, formatDims, formatSize } from './common.js';
 
 const store = {
   get: (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
   set: (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* tryb prywatny */ } },
 };
 
-let user = store.get('user', null); // { name, code }
+let user = store.get('user', null); // { id, name, token }
+if (user && !user.token) user = null; // zapis ze starszej wersji
 let config = null;
 let orders = [];
 let model = null; // { file, dims, object }
@@ -13,8 +14,8 @@ let viewer = null;
 let viewerModule = null;
 let filter = 'active';
 
-const classHeaders = () => ({ 'X-Class-Code': encodeURIComponent(user.code) });
-const sameName = (a, b) => a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase();
+const authHeaders = () => ({ Authorization: `Bearer ${user.token}` });
+const isMine = (o) => o.userId === user.id;
 const isActive = (o) => o.status === 'new' || o.status === 'printing';
 
 // ---------- logowanie ----------
@@ -24,25 +25,54 @@ function showLogin(message = '') {
   $('#logout').hidden = true;
   $('#who').textContent = '';
   $('#login-error').textContent = message;
-  if (user) { $('#login-name').value = user.name; $('#login-code').value = user.code; }
+  if (user) $('#login-name').value = user.name;
+  $('#login-password').value = '';
+}
+
+let registering = false;
+function setRegistering(on) {
+  registering = on;
+  $('#login-title').textContent = on ? 'Nowe konto' : 'Logowanie';
+  $('#login-submit').textContent = on ? 'Załóż konto' : 'Zaloguj';
+  $('#toggle-register').textContent = on ? 'Mam już konto' : 'Załóż konto';
+  $('#register-fields').hidden = !on;
+  $('#forgot').hidden = on;
+  $('#login-code').required = on;
+  $('#login-password').autocomplete = on ? 'new-password' : 'current-password';
+  $('#login-error').textContent = '';
+}
+$('#toggle-register').addEventListener('click', () => setRegistering(!registering));
+
+async function signIn(path, body, headers = {}) {
+  const result = await api(path, { method: 'POST', json: body, headers });
+  user = { ...result.user, token: result.token };
+  store.set('user', user);
+  start();
 }
 
 $('#login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const candidate = { name: $('#login-name').value.trim().replace(/\s+/g, ' '), code: $('#login-code').value.trim() };
-  if (candidate.name.length < 3) { $('#login-error').textContent = 'Podaj imię i nazwisko.'; return; }
-  setDemo(candidate.code.toLowerCase() === DEMO_CODE);
+  const body = { name: $('#login-name').value.trim().replace(/\s+/g, ' '), password: $('#login-password').value };
+  setDemo(false);
   try {
-    await api('/api/check-code', { method: 'POST', headers: { 'X-Class-Code': encodeURIComponent(candidate.code) } });
-    user = candidate;
-    store.set('user', user);
-    start();
+    if (registering) await signIn('/api/register', body, { 'X-Class-Code': encodeURIComponent($('#login-code').value.trim()) });
+    else await signIn('/api/login', body);
   } catch (err) {
     $('#login-error').textContent = err.message;
   }
 });
 
-$('#logout').addEventListener('click', () => showLogin());
+$('#open-demo').addEventListener('click', async () => {
+  setDemo(true);
+  await signIn('/api/login', { name: $('#login-name').value.trim() || 'Gość' });
+});
+
+$('#logout').addEventListener('click', () => {
+  user = null;
+  store.set('user', null);
+  setDemo(false);
+  showLogin();
+});
 
 // ---------- start ----------
 async function start() {
@@ -51,7 +81,7 @@ async function start() {
     config = await api('/api/config');
     await loadOrders();
   } catch (err) {
-    return showLogin(err.status === 401 ? 'Kod klasy został zmieniony — wpisz nowy.' : err.message);
+    return showLogin(err.status === 401 ? 'Zaloguj się ponownie.' : err.message);
   }
   $('#login').hidden = true;
   $('#app').hidden = false;
@@ -62,7 +92,7 @@ async function start() {
 }
 
 async function loadOrders() {
-  orders = (await api('/api/orders', { headers: classHeaders() })).orders;
+  orders = (await api('/api/orders', { headers: authHeaders() })).orders;
   renderOrders();
 }
 
@@ -92,7 +122,7 @@ function renderChoices() {
     ? available.map((f) => choice('filament', f.id, [swatch(f.color), `${f.name} · ${formatRate(f.pricePerMinute)}`], { checked: f.id === selectedFilament }))
     : [h('span', { class: 'hint' }, 'Brak dostępnych filamentów — zapytaj sprzedawcę.')]));
 
-  const mine = orders.filter((o) => sameName(o.name, user.name) && isActive(o)).length;
+  const mine = orders.filter((o) => isMine(o) && isActive(o)).length;
   $('#limit-info').textContent = `Twoje aktywne zamówienia: ${mine} z ${config.maxActive}`;
   updateBed();
 }
@@ -189,7 +219,6 @@ $('#order-form').addEventListener('submit', async (event) => {
   if (!filament) { error.textContent = 'Wybierz filament.'; return; }
 
   const meta = {
-    name: user.name,
     title: $('#title').value,
     fileName: model.file.name,
     quantity: Number($('#quantity').value),
@@ -203,10 +232,9 @@ $('#order-form').addEventListener('submit', async (event) => {
   try {
     const result = await api('/api/orders', {
       method: 'POST',
-      headers: { ...classHeaders(), 'X-Order': encodeURIComponent(JSON.stringify(meta)), 'Content-Type': 'application/octet-stream' },
+      headers: { ...authHeaders(), 'X-Order': encodeURIComponent(JSON.stringify(meta)), 'Content-Type': 'application/octet-stream' },
       body: model.file,
     });
-    store.set('tokens', { ...store.get('tokens', {}), [result.order.id]: result.cancelToken });
     success.textContent = `Zamówienie nr ${result.order.id} zostało przyjęte.`;
     $('#title').value = $('#notes').value = $('#file').value = '';
     $('#quantity').value = 1;
@@ -216,7 +244,7 @@ $('#order-form').addEventListener('submit', async (event) => {
     await loadOrders();
     renderChoices();
   } catch (err) {
-    if (err.status === 401) return showLogin('Kod klasy został zmieniony — wpisz nowy.');
+    if (err.status === 401) return showLogin('Zaloguj się ponownie.');
     error.textContent = err.message;
   } finally {
     button.disabled = false;
@@ -227,7 +255,7 @@ $('#order-form').addEventListener('submit', async (event) => {
 // ---------- kolejka ----------
 const FILTERS = {
   active: ['W kolejce', (o) => isActive(o)],
-  mine: ['Moje', (o) => sameName(o.name, user.name)],
+  mine: ['Moje', (o) => isMine(o)],
   done: ['Gotowe', (o) => o.status === 'done'],
   all: ['Wszystkie', () => true],
 };
@@ -239,20 +267,19 @@ function renderOrders() {
       onclick: () => { filter = key; renderOrders(); },
     }, `${label} (${orders.filter(test).length})`)));
 
-  const tokens = store.get('tokens', {});
   const printerName = (id) => config.printers.find((p) => p.id === id)?.name;
   const visible = orders.filter(FILTERS[filter][1]);
   // aktywne: od najstarszego (kolejność druku); pozostałe: od najnowszego
   visible.sort((a, b) => (filter === 'active' ? a.id - b.id : b.id - a.id));
 
   $('#orders').replaceChildren(...(visible.length ? visible.map((o) => {
-    const mine = sameName(o.name, user.name);
+    const mine = isMine(o);
     const printer = o.assignedPrinter ? printerName(o.assignedPrinter) : (printerName(o.printer) || 'dowolna drukarka');
     return h('div', { class: `order ${mine ? 'mine' : ''}` },
       h('div', { class: 'order-head' },
         h('span', { class: 'title' }, `#${o.id} ${o.title}`),
         statusBadge(o.status),
-        mine && o.status === 'new' && tokens[o.id] && h('button', { class: 'small danger', type: 'button', onclick: () => cancelOrder(o) }, 'Anuluj')),
+        mine && o.status === 'new' && h('button', { class: 'small danger', type: 'button', onclick: () => cancelOrder(o) }, 'Anuluj')),
       h('div', { class: 'order-meta' },
         `${o.name} · ${formatDate(o.createdAt)} · ${printer} · `, swatch(o.filament.color), ` ${o.filament.name} · ${o.quantity} szt.`),
       o.price != null && h('div', { class: 'order-price' }, priceText(o), ' ',
@@ -264,7 +291,7 @@ function renderOrders() {
 async function cancelOrder(order) {
   if (!confirm(`Anulować zamówienie #${order.id} „${order.title}"?`)) return;
   try {
-    await api(`/api/orders/${order.id}/cancel`, { method: 'POST', headers: classHeaders(), json: { token: store.get('tokens', {})[order.id] } });
+    await api(`/api/orders/${order.id}/cancel`, { method: 'POST', headers: authHeaders() });
   } catch (err) {
     alert(err.message);
   }
