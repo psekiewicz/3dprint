@@ -1,25 +1,63 @@
-# Zamówienia druku 3D
+# Druk 3D na zamówienie
 
-Prosty sklepik z wydrukami 3D dla kolegów z klasy, na drukarki **Prusa MINI+** i **Prusa MK4S**.
+Sklepik z wydrukami 3D dla kolegów z klasy. Drukarki: **Prusa MINI+** i **Prusa MK4S z MMU3** (do 5 kolorów w jednym wydruku).
 
-**Kupujący** (`/`): zakłada konto (imię i nazwisko, własne hasło, kod klasy), wgrywa plik STL lub 3MF, widzi podgląd 3D i informację, czy model mieści się w drukarce, wybiera drukarkę i filament, a potem śledzi w kolejce status, cenę i to, czy zamówienie jest opłacone.
+Strona jest pisana dla ludzi, którzy o druku 3D nie wiedzą nic: zamiast pliku STL wystarczy link albo opis.
 
-**Sprzedawca** (`/admin.html`): pobiera pliki, wpisuje czas druku (z niego wylicza się cena), zmienia statusy, oznacza zapłatę, pisze wiadomość do kupującego zarządza kontami oraz ustawia kod klasy, filamenty ze stawkami, dostępne drukarki i limit zamówień na osobę.
+## Co może kupujący (`/`)
+
+Zakłada konto (imię i nazwisko, e-mail, hasło, kod klasy) i zamawia na jeden z czterech sposobów:
+
+| Sposób | Co podaje | Koszt |
+|---|---|---|
+| Mam link | adres modelu z Printables, MakerWorld, Thingiverse… | sam wydruk |
+| Znajdźcie mi model | opis tego, czego szuka | sam wydruk, szukanie gratis |
+| Zaprojektujcie mi | opis rzeczy, której nie ma w internecie | wydruk + opłata za projekt |
+| Mam plik | STL lub 3MF, z podglądem 3D i sprawdzeniem, czy się zmieści | sam wydruk |
+
+Wybiera kolor (jeden albo do pięciu, wtedy pisze, co ma być w którym), liczbę sztuk i wysyła. Potem dostaje mailem cenę i **musi ją potwierdzić** na stronie, zanim cokolwiek zostanie wydrukowane.
+
+## Co może sprzedawca (`/admin.html`)
+
+Zamówienie przechodzi przez kolejne etapy:
+
+1. **Do wyceny**: sprawdzasz model (albo go szukasz i wklejasz link), tniesz w PrusaSlicer, wpisujesz czas druku i ewentualną opłatę za usługę.
+2. **Czeka na potwierdzenie**: przycisk „Wyślij do potwierdzenia" wysyła kupującemu maila z modelem i ceną.
+3. **Potwierdzone → Drukuje się → Do odbioru**: przy „Do odbioru" idzie drugi mail.
+4. **Odebrane**: zaznaczasz też „zapłacone".
+
+W panelu ustawiasz też nazwę sklepu, kod klasy, filamenty ze stawkami i opisami, dostępne drukarki, cenę „od" za projekt, limit zamówień na osobę oraz konta sprzedawców i kupujących.
 
 ## Cena
 
-**Cena = stawka filamentu (zł/min) × czas druku (min).**
+**Cena = stawka filamentu (zł/min) × czas druku (min) + opłata za usługę.**
 
-Stawkę każdego filamentu ustawiasz w panelu. Czas druku wpisujesz przy zamówieniu po pocięciu modelu w PrusaSlicer — cena wylicza się sama i od razu widzi ją kupujący. Zamówienie zapamiętuje stawkę z chwili złożenia, więc późniejsza zmiana cennika nie zmienia starych zamówień. Płatność odbywa się poza aplikacją (gotówka, BLIK); w panelu tylko zaznaczasz „zapłacone".
+Przy kilku kolorach liczy się najwyższa stawka z wybranych. Zamówienie zapamiętuje stawki z chwili złożenia, więc zmiana cennika nie rusza starych zamówień. Płatność odbywa się poza aplikacją (gotówka, BLIK).
+
+## E-maile
+
+Maile wychodzą z Twojej skrzynki przez SMTP. Potrzebne zmienne (wzór w `.env.example`):
+
+| Zmienna | Przykład | Opis |
+|---|---|---|
+| `SMTP_HOST` | `ssl0.ovh.net` | serwer poczty wychodzącej (sprawdź w panelu dostawcy) |
+| `SMTP_PORT` | `465` | 465 (SSL) albo 587 (STARTTLS) |
+| `SMTP_USER` | `contact@pixelinventor.com` | login do skrzynki |
+| `SMTP_PASS` | | hasło do skrzynki |
+| `MAIL_FROM` | `Drukarnia 3D <contact@pixelinventor.com>` | nadawca widoczny w mailu |
+| `MAIL_REPLY_TO` | | opcjonalnie: dokąd idą odpowiedzi |
+| `PUBLIC_URL` | `https://druk.pixelinventor.com` | adres strony do linku w mailu |
+
+Bez tych ustawień wszystko działa, tylko maile nie wychodzą, a panel pokazuje o tym ostrzeżenie. Hasło do skrzynki trzymaj w pliku `.env` na serwerze, nigdy w repozytorium.
+
+Adresy e-mail kupujących nie są weryfikowane: literówka przy rejestracji oznacza, że mail nie dojdzie. Adres widać w panelu przy koncie.
 
 ## Jak to jest zbudowane
 
 | Część | Gdzie | Co robi |
 |---|---|---|
-| Serwer | `server/server.js` | API, zapis zamówień (`data/db.json`) i plików (`data/uploads/`). Czysty Node.js, bez instalowania paczek. |
-| Strona | główny katalog (`index.html`, `admin.html`, …) | Statyczne pliki HTML/JS. Serwuje je Raspberry Pi; można je też wystawić na GitHub Pages. |
-
-GitHub Pages hostuje tylko statyczne strony — nie przyjmie plików ani nie zapamięta zamówień — dlatego dane zawsze trzyma Raspberry Pi.
+| Serwer | `server/` | API, zapis zamówień (`data/db.json`) i plików (`data/uploads/`), wysyłka maili. Node.js; jedyna zależność to `nodemailer`. |
+| Strona | główny katalog (`index.html`, `admin.html`, …) | Statyczne pliki HTML/JS, serwowane przez ten sam serwer. |
 
 ## Wersja pokazowa (bez serwera)
 
@@ -32,6 +70,7 @@ Potrzebny jest Node.js 18 lub nowszy (`node -v`). Na Raspberry Pi OS: `sudo apt 
 ```bash
 git clone https://github.com/psekiewicz/3dprint.git
 cd 3dprint
+npm install --omit=dev
 node server/server.js
 ```
 
@@ -53,6 +92,7 @@ Plik usługi zakłada użytkownika `pi` i katalog `/home/pi/3dprint` — popraw 
 
 ```bash
 git clone https://github.com/psekiewicz/3dprint.git && cd 3dprint
+cp .env.example .env && nano .env    # skrzynka pocztowa i adres strony
 docker compose up -d --build
 docker compose logs druk3d    # hasło sprzedawcy i kod klasy z pierwszego uruchomienia
 ```
@@ -103,4 +143,5 @@ Sprzedawcy są równorzędni: każdy może dodać lub usunąć innego, ale hasł
 ## Dobrze wiedzieć
 
 - Wymiary liczone są w przeglądarce przy założeniu, że model jest w milimetrach.
-- Podgląd 3D korzysta z biblioteki [three.js](https://threejs.org) (licencja MIT), dołączonej w `vendor/`, więc działa też bez internetu.
+- Podgląd 3D korzysta z biblioteki [three.js](https://threejs.org) (licencja MIT), a krój pisma to Bricolage Grotesque (licencja OFL). Oba są dołączone w `vendor/`.
+- Kupujący widzi w kolejce cudze zamówienia tylko z nazwą, kolorem i statusem: bez linków, uwag i cen.

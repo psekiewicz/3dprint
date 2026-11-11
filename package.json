@@ -1,8 +1,9 @@
 {
   "name": "druk3d-zamowienia",
-  "version": "1.0.0",
-  "description": "Zamówienia druku 3D dla klasy (Prusa MINI+ i MK4S)",
+  "version": "2.0.0",
+  "description": "Sklepik z wydrukami 3D dla klasy (Prusa MINI+ i MK4S z MMU3)",
   "private": true,
   "scripts": { "start": "node server/server.js" },
-  "engines": { "node": ">=18" }
+  "engines": { "node": ">=18" },
+  "dependencies": { "nodemailer": "^6.9.16" }
 }

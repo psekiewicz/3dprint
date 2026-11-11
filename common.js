@@ -2,12 +2,21 @@
 export const API = (window.API_URL || '').replace(/\/$/, '');
 
 export const STATUS = {
-  new: 'Oczekuje',
+  new: 'Do wyceny',
+  confirm: 'Czeka na potwierdzenie',
+  accepted: 'Potwierdzone',
   printing: 'Drukuje się',
-  done: 'Gotowe do odbioru',
+  done: 'Do odbioru',
   collected: 'Odebrane',
   rejected: 'Odrzucone',
   cancelled: 'Anulowane',
+};
+export const ACTIVE = ['new', 'confirm', 'accepted', 'printing'];
+export const KIND = {
+  link: 'model z linku',
+  file: 'własny plik',
+  find: 'szukamy modelu',
+  design: 'projekt na zamówienie',
 };
 
 // Wersja pokazowa: włącza ją kod klasy (albo hasło sprzedawcy) „demo".
@@ -94,8 +103,20 @@ export function formatMinutes(minutes) {
   return hours ? `${hours} h ${minutes % 60} min` : `${minutes} min`;
 }
 // Opis ceny zamówienia albo null, gdy sprzedawca jeszcze jej nie ustalił.
-export const priceText = (o) =>
-  (o.price == null ? null : `Cena: ${formatPrice(o.price)} (czas druku ${formatMinutes(o.printMinutes)})`);
+export function priceText(o) {
+  if (o.price == null) return null;
+  const parts = [];
+  if (o.printMinutes) parts.push(`druk ${formatMinutes(o.printMinutes)}`);
+  if (o.serviceFee) parts.push(`usługa ${formatPrice(o.serviceFee)}`);
+  return `${formatPrice(o.price)}${parts.length ? ` (${parts.join(' + ')})` : ''}`;
+}
+export const orderRate = (o) => Math.max(0, ...(o.filaments || []).map((f) => f.pricePerMinute || 0));
+export const orderNumber = (o) => `#${String(o.id).padStart(3, '0')}`;
+
+// Kolory zamówienia jako kropki z nazwami.
+export function colors(o) {
+  return h('span', { class: 'colors' }, ...(o.filaments || []).map((f) => h('span', {}, swatch(f.color), ` ${f.name}`)));
+}
 
 export function swatch(color) {
   return h('span', { class: 'swatch', style: `background:${color}` });

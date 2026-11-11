@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const mail = require('./mail');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -14,13 +15,16 @@ const WEB_DIR = ROOT;
 const WEB_FILES = ['/index.html', '/admin.html', '/app.js', '/admin.js', '/common.js', '/demo.js', '/viewer.js', '/config.js', '/style.css'];
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/$/, ''); // adres strony do linków w e-mailach
 
 const PRINTERS = [
-  { id: 'mini', name: 'Prusa MINI+', volume: [180, 180, 180] },
-  { id: 'mk4s', name: 'Prusa MK4S', volume: [250, 210, 220] },
+  { id: 'mini', name: 'Prusa MINI+', volume: [180, 180, 180], maxColors: 1 },
+  { id: 'mk4s', name: 'Prusa MK4S', volume: [250, 210, 220], maxColors: 5 }, // MMU3
 ];
-const STATUSES = ['new', 'printing', 'done', 'collected', 'rejected', 'cancelled'];
-const ACTIVE = ['new', 'printing'];
+// new: do wyceny · confirm: czeka na potwierdzenie kupującego · accepted: potwierdzone, w kolejce
+const STATUSES = ['new', 'confirm', 'accepted', 'printing', 'done', 'collected', 'rejected', 'cancelled'];
+const ACTIVE = ['new', 'confirm', 'accepted', 'printing'];
+const KINDS = ['link', 'file', 'find', 'design'];
 const EXTENSIONS = ['stl', '3mf'];
 
 // ---------- baza danych (plik JSON) ----------
@@ -48,16 +52,18 @@ if (fs.existsSync(DB_FILE)) {
     users: [],
     nextUserId: 1,
     settings: {
+      shopName: 'Drukarnia 3D',
+      designFeeFrom: 10,
       classCode: randomCode(6).toLowerCase(),
       adminPassword: hashPassword(password),
       maxActive: 2,
       maxFileMB: 50,
       printers: { mini: true, mk4s: true },
       filaments: [
-        { id: 'f1', name: 'PLA czarny', color: '#1d1d1f', available: true, pricePerMinute: 0.05 },
-        { id: 'f2', name: 'PLA biały', color: '#f4f4f4', available: true, pricePerMinute: 0.05 },
-        { id: 'f3', name: 'PLA pomarańczowy', color: '#fa6831', available: true, pricePerMinute: 0.05 },
-        { id: 'f4', name: 'PETG przezroczysty', color: '#cfe8f3', available: true, pricePerMinute: 0.07 },
+        { id: 'f1', name: 'PLA czarny', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#1d1d1f', available: true, pricePerMinute: 0.05 },
+        { id: 'f2', name: 'PLA biały', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#f4f4f4', available: true, pricePerMinute: 0.05 },
+        { id: 'f3', name: 'PLA pomarańczowy', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#fa6831', available: true, pricePerMinute: 0.05 },
+        { id: 'f4', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.07 },
       ],
     },
   };
@@ -71,6 +77,13 @@ if (fs.existsSync(DB_FILE)) {
 // uzupełnienie baz utworzonych przez starsze wersje
 db.users ||= [];
 db.nextUserId ||= 1;
+db.settings.shopName ??= 'Drukarnia 3D';
+db.settings.designFeeFrom ??= 10;
+for (const o of db.orders) {
+  o.filaments ||= o.filament ? [o.filament] : [];
+  o.kind ||= 'file';
+  o.serviceFee ||= 0;
+}
 if (!db.settings.secret) { db.settings.secret = crypto.randomBytes(32).toString('hex'); saveNow(); }
 
 // Sprzedawcy mają osobne konta; pierwsze („admin") powstaje z hasła z pierwszego uruchomienia.
@@ -136,25 +149,79 @@ function header(req, name) {
 function publicConfig() {
   const s = db.settings;
   return {
+    shopName: s.shopName,
+    designFeeFrom: s.designFeeFrom,
     printers: PRINTERS.map((p) => ({ ...p, enabled: !!s.printers[p.id] })),
     filaments: s.filaments,
     maxActive: s.maxActive,
     maxFileMB: s.maxFileMB,
   };
 }
-const publicOrder = ({ cancelToken, storedFile, ...rest }) => rest;
+const publicOrder = ({ cancelToken, storedFile, filament, ...rest }) => ({ ...rest, hasFile: !!storedFile });
+// Cudze zamówienia w kolejce: tylko to, co potrzebne, bez linków, uwag i cen.
+function queueOrder(o, user) {
+  if (o.userId === user.id) return publicOrder(o);
+  const { id, userId, name, title, kind, status, quantity, filaments, createdAt } = o;
+  return { id, userId, name, title, kind, status, quantity, filaments, createdAt };
+}
 
-// Cena = stawka filamentu (zł/min) × czas druku (min).
-function setPrintTime(order, minutes, filaments) {
-  if (minutes === null || minutes === '') { order.printMinutes = null; order.price = null; return; }
+// Cena = najwyższa stawka z wybranych filamentów (zł/min) × czas druku (min) + opłata za usługę.
+const cleanRate = (value) => { const r = Math.round(Number(value) * 1000) / 1000; return r >= 0 && r <= 100 ? r : 0; };
+const orderRate = (order) => Math.max(0, ...order.filaments.map((f) => f.pricePerMinute || 0));
+function reprice(order) {
+  if (order.printMinutes == null && !order.serviceFee) { order.price = null; return; }
+  order.price = Math.round(((order.printMinutes || 0) * orderRate(order) + (order.serviceFee || 0)) * 100) / 100;
+}
+function setPrintTime(order, minutes) {
+  if (minutes === null || minutes === '') { order.printMinutes = null; return; }
   const m = Math.round(Number(minutes));
   if (!(m >= 1 && m <= 100000)) fail(400, 'Podaj czas druku w minutach (co najmniej 1).');
-  const current = filaments.find((f) => f.id === order.filament.id);
-  const rate = order.filament.pricePerMinute ?? (current ? current.pricePerMinute : 0) ?? 0;
   order.printMinutes = m;
-  order.price = Math.round(m * rate * 100) / 100;
 }
-const cleanRate = (value) => { const r = Math.round(Number(value) * 1000) / 1000; return r >= 0 && r <= 100 ? r : 0; };
+const cleanLink = (value) => {
+  const link = String(value ?? '').trim().slice(0, 500);
+  if (!link) return '';
+  let url;
+  try { url = new URL(link); } catch { fail(400, 'To nie wygląda na link. Skopiuj cały adres strony z modelem (zaczyna się od https://).'); }
+  if (!['http:', 'https:'].includes(url.protocol)) fail(400, 'Link musi zaczynać się od http:// lub https://.');
+  return url.href;
+};
+const cleanEmail = (value) => {
+  const email = String(value ?? '').trim().toLowerCase().slice(0, 120);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail(400, 'Podaj poprawny adres e-mail.');
+  return email;
+};
+
+// ---------- e-maile do kupujących ----------
+const firstName = (name) => name.split(' ')[0];
+const money = (value) => `${value.toFixed(2).replace('.', ',')} zł`;
+const duration = (m) => (m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`);
+function orderMail(order, kind) {
+  const user = db.users.find((u) => u.id === order.userId);
+  if (!user || !user.email) return Promise.resolve('off');
+  const shop = db.settings.shopName;
+  const where = PUBLIC_URL ? `Wejdź na ${PUBLIC_URL}` : 'Wejdź na stronę z zamówieniami';
+  const lines = [`Cześć ${firstName(user.name)},`, ''];
+  let subject;
+  if (kind === 'confirm') {
+    subject = `Potwierdź zamówienie #${order.id}: ${order.title}`;
+    lines.push(`mamy wycenę Twojego zamówienia #${order.id} („${order.title}"). Zerknij, czy wszystko się zgadza:`, '');
+    if (order.link) lines.push(`Model: ${order.link}`);
+    lines.push(`Kolory: ${order.filaments.map((f) => f.name).join(', ')}`, `Sztuk: ${order.quantity}`);
+    if (order.printMinutes) lines.push(`Czas druku: ok. ${duration(order.printMinutes)}`);
+    if (order.serviceFee) lines.push(`Opłata za usługę: ${money(order.serviceFee)}`);
+    lines.push(`Cena razem: ${money(order.price)}`);
+    if (order.teacherNote) lines.push('', `Od nas: ${order.teacherNote}`);
+    lines.push('', `${where}, zaloguj się i kliknij „Potwierdzam" albo „Rezygnuję".`, 'Bez Twojego potwierdzenia niczego nie drukujemy.');
+  } else {
+    subject = `Zamówienie #${order.id} gotowe do odbioru: ${order.title}`;
+    lines.push(`Twój wydruk „${order.title}" (zamówienie #${order.id}) jest gotowy do odbioru.`);
+    if (order.price != null && !order.paid) lines.push(`Do zapłaty: ${money(order.price)}.`);
+    if (order.teacherNote) lines.push('', `Od nas: ${order.teacherNote}`);
+  }
+  lines.push('', shop);
+  return mail.send({ to: user.email, subject, text: lines.join('\n') });
+}
 
 
 // ---------- autoryzacja ----------
@@ -197,7 +264,7 @@ function throttle(req) {
     ok() { loginFailures.delete(ip); },
   };
 }
-const publicUser = (user) => ({ id: user.id, name: user.name, createdAt: user.createdAt });
+const publicUser = (user) => ({ id: user.id, name: user.name, email: user.email || '', createdAt: user.createdAt });
 function requireAdmin(req) {
   const token = adminToken(req);
   const session = sessions.get(token);
@@ -213,30 +280,60 @@ function createOrder(req, res) {
   try { meta = JSON.parse(header(req, 'x-order')); } catch { fail(400, 'Brak danych zamówienia.'); }
   const s = db.settings;
 
-  const name = user.name;
+  const kind = meta.kind;
   const title = text(meta.title, 80);
+  const notes = longText(meta.notes, 1000);
+  const quantity = Math.floor(Number(meta.quantity));
+  const printer = meta.printer || 'any';
+  const ids = Array.isArray(meta.filaments) ? [...new Set(meta.filaments)] : [];
+  const filaments = ids.map((id) => s.filaments.find((f) => f.id === id && f.available));
+  const enabled = PRINTERS.filter((p) => s.printers[p.id]);
+  const chosen = printer === 'any' ? enabled : enabled.filter((p) => p.id === printer);
+
+  if (!KINDS.includes(kind)) fail(400, 'Wybierz, co chcesz zamówić.');
+  if (!title) fail(400, 'Nazwij jakoś swoje zamówienie.');
+  if (!(quantity >= 1 && quantity <= 10)) fail(400, 'Liczba sztuk musi być od 1 do 10.');
+  if (!chosen.length) fail(400, 'Wybierz dostępną drukarkę.');
+  if (!filaments.length || filaments.includes(undefined)) fail(400, 'Wybierz kolor z listy.');
+  const maxColors = Math.max(...chosen.map((p) => p.maxColors));
+  if (filaments.length > maxColors) {
+    fail(400, maxColors > 1 ? `W jednym wydruku zmieści się najwyżej ${maxColors} kolorów.` : 'Ta drukarka drukuje tylko jednym kolorem naraz.');
+  }
+  const colorPlan = longText(meta.colorPlan, 500);
+  if (filaments.length > 1 && !colorPlan) fail(400, 'Napisz, co ma być w którym kolorze.');
+  const link = kind === 'link' ? cleanLink(meta.link) : '';
+  if (kind === 'link' && !link) fail(400, 'Wklej link do modelu.');
+  if ((kind === 'find' || kind === 'design') && notes.length < 10) fail(400, 'Opisz w kilku słowach, o co Ci chodzi.');
+  const active = db.orders.filter((o) => o.userId === user.id && ACTIVE.includes(o.status)).length;
+  if (active >= s.maxActive) fail(429, `Masz już ${active} zamówienia w toku (limit: ${s.maxActive}). Poczekaj, aż któreś będzie gotowe.`);
+
+  const finish = (file) => {
+    const order = {
+      id: db.nextId++, userId: user.id, name: user.name, kind, title, link, quantity, printer,
+      filaments: filaments.map((f) => ({ id: f.id, name: f.name, color: f.color, pricePerMinute: cleanRate(f.pricePerMinute) })),
+      colorPlan, notes,
+      fileName: '', fileSize: 0, dims: null, ...file,
+      printMinutes: null, serviceFee: 0, price: null, paid: false,
+      status: 'new', assignedPrinter: null, teacherNote: '',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    db.orders.push(order);
+    saveNow();
+    send(res, 201, { order: publicOrder(order) });
+  };
+
+  if (kind !== 'file') { req.resume(); return finish({}); }
+
   const fileName = text(meta.fileName, 120).replace(/[\\/]/g, '_');
   const ext = fileName.split('.').pop().toLowerCase();
-  const quantity = Math.floor(Number(meta.quantity));
-  const printer = meta.printer;
-  const filament = s.filaments.find((f) => f.id === meta.filament && f.available);
   const size = Number(req.headers['content-length']);
-
-  if (!title) fail(400, 'Podaj nazwę wydruku.');
-  if (!EXTENSIONS.includes(ext)) fail(400, 'Dozwolone są tylko pliki STL i 3MF.');
-  if (!(quantity >= 1 && quantity <= 10)) fail(400, 'Liczba sztuk musi być od 1 do 10.');
-  if (printer !== 'any' && !(PRINTERS.some((p) => p.id === printer) && s.printers[printer])) fail(400, 'Wybierz dostępną drukarkę.');
-  if (!filament) fail(400, 'Wybierz dostępny filament.');
+  if (!EXTENSIONS.includes(ext)) fail(400, 'Przyjmujemy tylko pliki STL i 3MF.');
   if (!(size > 0)) fail(400, 'Brak pliku z modelem.');
   if (size > s.maxFileMB * 1024 * 1024) fail(413, `Plik jest za duży (limit ${s.maxFileMB} MB).`);
-  const active = db.orders.filter((o) => o.userId === user.id && ACTIVE.includes(o.status)).length;
-  if (active >= s.maxActive) fail(429, `Masz już ${active} aktywne zamówienia (limit: ${s.maxActive}). Poczekaj, aż któreś zostanie wydrukowane.`);
-
   const dims = Array.isArray(meta.dims) && meta.dims.length === 3 && meta.dims.every((d) => Number.isFinite(d) && d >= 0)
     ? meta.dims.map((d) => Math.round(d * 10) / 10) : null;
 
-  const id = db.nextId++;
-  const storedFile = `${id}.${ext}`;
+  const storedFile = `${crypto.randomBytes(8).toString('hex')}.${ext}`;
   const target = path.join(UPLOAD_DIR, storedFile);
   const out = fs.createWriteStream(target);
   let done = false;
@@ -244,22 +341,7 @@ function createOrder(req, res) {
   req.on('aborted', abort);
   req.on('error', abort);
   out.on('error', () => { abort(); if (!res.headersSent) send(res, 500, { error: 'Nie udało się zapisać pliku.' }); });
-  out.on('finish', () => {
-    if (done) return;
-    done = true;
-    const order = {
-      id, userId: user.id, name, title, fileName, fileSize: size, dims, quantity, printer,
-      filament: { id: filament.id, name: filament.name, color: filament.color, pricePerMinute: cleanRate(filament.pricePerMinute) },
-      printMinutes: null, price: null, paid: false,
-      notes: longText(meta.notes, 500),
-      status: 'new', assignedPrinter: null, teacherNote: '',
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      storedFile,
-    };
-    db.orders.push(order);
-    saveNow();
-    send(res, 201, { order: publicOrder(order) });
-  });
+  out.on('finish', () => { if (done) return; done = true; finish({ fileName, fileSize: size, dims, storedFile }); });
   req.pipe(out);
 }
 
@@ -283,10 +365,11 @@ async function api(req, res, url) {
       const name = text(body.name, 60);
       const password = String(body.password || '');
       if (name.length < 3) fail(400, 'Podaj imię i nazwisko.');
+      const email = cleanEmail(body.email);
       if (password.length < 6 || password.length > 100) fail(400, 'Hasło musi mieć co najmniej 6 znaków.');
       if (db.users.some((u) => nameKey(u.name) === nameKey(name))) fail(409, 'Takie konto już istnieje. Zaloguj się albo poproś sprzedawcę o nowe hasło.');
       if (db.users.length >= 500) fail(403, 'Osiągnięto limit kont.');
-      const user = { id: db.nextUserId++, name, password: hashPassword(password), createdAt: new Date().toISOString() };
+      const user = { id: db.nextUserId++, name, email, password: hashPassword(password), createdAt: new Date().toISOString() };
       db.users.push(user);
       saveNow();
       return send(res, 201, { user: publicUser(user), token: userToken(user) });
@@ -301,9 +384,10 @@ async function api(req, res, url) {
       return send(res, 200, { user: publicUser(user), token: userToken(user) });
     }
 
-    case 'GET /api/orders':
-      requireUser(req);
-      return send(res, 200, { orders: db.orders.map(publicOrder) });
+    case 'GET /api/orders': {
+      const user = requireUser(req);
+      return send(res, 200, { orders: db.orders.map((o) => queueOrder(o, user)) });
+    }
 
     case 'POST /api/orders':
       return createOrder(req, res);
@@ -312,8 +396,19 @@ async function api(req, res, url) {
       const user = requireUser(req);
       const order = findOrder(id);
       if (order.userId !== user.id) fail(403, 'To nie jest Twoje zamówienie.');
-      if (order.status !== 'new') fail(409, 'Tego zamówienia nie da się już anulować.');
+      if (!['new', 'confirm'].includes(order.status)) fail(409, 'Tego zamówienia nie da się już anulować — napisz do sprzedawcy.');
       order.status = 'cancelled';
+      order.updatedAt = new Date().toISOString();
+      saveNow();
+      return send(res, 200, { order: publicOrder(order) });
+    }
+
+    case 'POST /api/orders/:id/confirm': {
+      const user = requireUser(req);
+      const order = findOrder(id);
+      if (order.userId !== user.id) fail(403, 'To nie jest Twoje zamówienie.');
+      if (order.status !== 'confirm') fail(409, 'To zamówienie nie czeka teraz na potwierdzenie.');
+      order.status = 'accepted';
       order.updatedAt = new Date().toISOString();
       saveNow();
       return send(res, 200, { order: publicOrder(order) });
@@ -338,21 +433,32 @@ async function api(req, res, url) {
       const admin = requireAdmin(req);
       const body = await readJson(req);
       const order = findOrder(id);
-      if (body.status !== undefined) {
-        if (!STATUSES.includes(body.status)) fail(400, 'Nieznany status.');
-        order.status = body.status;
-      }
+      const before = order.status;
+      if (body.status !== undefined && !STATUSES.includes(body.status)) fail(400, 'Nieznany status.');
       if (body.assignedPrinter !== undefined) {
         if (body.assignedPrinter !== null && !PRINTERS.some((p) => p.id === body.assignedPrinter)) fail(400, 'Nieznana drukarka.');
         order.assignedPrinter = body.assignedPrinter;
       }
       if (body.teacherNote !== undefined) order.teacherNote = longText(body.teacherNote, 500);
-      if (body.printMinutes !== undefined) setPrintTime(order, body.printMinutes, db.settings.filaments);
+      if (body.link !== undefined) order.link = cleanLink(body.link);
+      if (body.printMinutes !== undefined) setPrintTime(order, body.printMinutes);
+      if (body.serviceFee !== undefined) {
+        const fee = Math.round(Number(body.serviceFee || 0) * 100) / 100;
+        if (!(fee >= 0 && fee <= 10000)) fail(400, 'Opłata za usługę: od 0 zł.');
+        order.serviceFee = fee;
+      }
+      reprice(order);
       if (body.paid !== undefined) order.paid = !!body.paid;
+      if (body.status === 'confirm' && order.price == null) fail(400, 'Najpierw wpisz czas druku (albo opłatę), żeby kupujący zobaczył cenę.');
+      if (body.status !== undefined) order.status = body.status;
       order.handledBy = admin.name;
       order.updatedAt = new Date().toISOString();
       saveNow();
-      return send(res, 200, { order: publicOrder(order) });
+      // e-mail tylko przy wejściu w dany status, nie przy każdym zapisie
+      let mailed = null;
+      if (order.status !== before && order.status === 'confirm') mailed = await orderMail(order, 'confirm');
+      if (order.status !== before && order.status === 'done') mailed = await orderMail(order, 'done');
+      return send(res, 200, { order: publicOrder(order), mail: mailed });
     }
 
     case 'DELETE /api/admin/orders/:id': {
@@ -360,15 +466,15 @@ async function api(req, res, url) {
       const order = findOrder(id);
       db.orders = db.orders.filter((o) => o !== order);
       saveNow();
-      fs.rm(path.join(UPLOAD_DIR, order.storedFile), { force: true }, () => {});
+      if (order.storedFile) fs.rm(path.join(UPLOAD_DIR, order.storedFile), { force: true }, () => {});
       return send(res, 200, { ok: true });
     }
 
     case 'GET /api/admin/orders/:id/file': {
       requireAdmin(req);
       const order = findOrder(id);
-      const file = path.join(UPLOAD_DIR, order.storedFile);
-      if (!fs.existsSync(file)) fail(404, 'Plik został usunięty.');
+      const file = path.join(UPLOAD_DIR, order.storedFile || 'brak');
+      if (!order.storedFile || !fs.existsSync(file)) fail(404, 'To zamówienie nie ma pliku.');
       res.writeHead(200, {
         'Content-Type': 'application/octet-stream',
         'Content-Length': fs.statSync(file).size,
@@ -443,7 +549,7 @@ async function api(req, res, url) {
     case 'GET /api/admin/settings': {
       requireAdmin(req);
       const { secret, ...settings } = db.settings;
-      return send(res, 200, { settings });
+      return send(res, 200, { settings, mail: mail.enabled() });
     }
 
     case 'PUT /api/admin/settings': {
@@ -451,6 +557,9 @@ async function api(req, res, url) {
       const body = await readJson(req);
       const s = db.settings;
       const classCode = text(body.classCode, 40);
+      const shopName = text(body.shopName, 40) || 'Drukarnia 3D';
+      const designFeeFrom = Math.round(Number(body.designFeeFrom) * 100) / 100;
+      if (!(designFeeFrom >= 0 && designFeeFrom <= 10000)) fail(400, 'Cena projektu: od 0 zł.');
       const maxActive = Math.floor(Number(body.maxActive));
       const maxFileMB = Math.floor(Number(body.maxFileMB));
       if (classCode.length < 3) fail(400, 'Kod klasy musi mieć co najmniej 3 znaki.');
@@ -460,17 +569,18 @@ async function api(req, res, url) {
       const filaments = body.filaments.map((f) => ({
         id: /^[\w-]{1,20}$/.test(f.id) ? f.id : 'f' + crypto.randomBytes(4).toString('hex'),
         name: text(f.name, 40),
+        note: text(f.note, 80),
         color: /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : '#888888',
         available: !!f.available,
         pricePerMinute: cleanRate(f.pricePerMinute),
       })).filter((f) => f.name);
       Object.assign(s, {
-        classCode, maxActive, maxFileMB, filaments,
+        shopName, designFeeFrom, classCode, maxActive, maxFileMB, filaments,
         printers: Object.fromEntries(PRINTERS.map((p) => [p.id, !!(body.printers && body.printers[p.id])])),
       });
       saveNow();
       const { secret, ...settings } = s;
-      return send(res, 200, { settings });
+      return send(res, 200, { settings, mail: mail.enabled() });
     }
   }
   fail(404, 'Nie znaleziono.');
@@ -479,7 +589,7 @@ async function api(req, res, url) {
 // ---------- pliki statyczne ----------
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json',
+  '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json',
 };
 function serveStatic(req, res, url) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Niedozwolona metoda.' });

@@ -1,15 +1,25 @@
-import { API, api, h, $, formatDate, DEMO_CODE, isDemo, setDemo, showDemoBanner, STATUS, fits, swatch, formatRate, formatPrice, priceText, statusBadge, formatDims, formatSize } from './common.js';
+import {
+  API, api, h, $, formatDate, DEMO_CODE, isDemo, setDemo, showDemoBanner, STATUS, KIND, fits, colors, orderRate, orderNumber,
+  formatRate, formatPrice, formatMinutes, statusBadge, formatDims, formatSize,
+} from './common.js';
 
 const PRINTERS = [
   { id: 'mini', name: 'Prusa MINI+', volume: [180, 180, 180] },
   { id: 'mk4s', name: 'Prusa MK4S', volume: [250, 210, 220] },
 ];
 const FILTERS = {
-  new: ['Oczekujące', (o) => o.status === 'new'],
+  new: ['Do wyceny', (o) => o.status === 'new'],
+  confirm: ['Czekają na OK', (o) => o.status === 'confirm'],
+  accepted: ['Do druku', (o) => o.status === 'accepted'],
   printing: ['W druku', (o) => o.status === 'printing'],
   done: ['Do odbioru', (o) => o.status === 'done'],
   closed: ['Zakończone', (o) => ['collected', 'rejected', 'cancelled'].includes(o.status)],
   all: ['Wszystkie', () => true],
+};
+const MAIL = {
+  sent: 'Zapisane, mail poszedł.',
+  off: 'Zapisane, ale mail NIE poszedł (brak skrzynki SMTP albo adresu kupującego).',
+  failed: 'Zapisane, ale maila nie udało się wysłać. Sprawdź logi serwera.',
 };
 
 let token = sessionStorage.getItem('adminToken');
@@ -62,6 +72,7 @@ async function start() {
     orders = o.orders;
     users = u.users;
     fillSettings(s.settings);
+    $('#mail-off').hidden = s.mail || isDemo();
   } catch (err) {
     if (err.status !== 401) { showLogin(); $('#login-error').textContent = err.message; }
     return;
@@ -88,71 +99,91 @@ function renderOrders() {
   $('#totals').textContent = `Do zapłaty: ${sum(live.filter((o) => !o.paid))} · Zapłacono: ${sum(live.filter((o) => o.paid))}`;
 
   const visible = orders.filter(FILTERS[filter][1]);
-  visible.sort((a, b) => (['new', 'printing'].includes(filter) ? a.id - b.id : b.id - a.id));
+  visible.sort((a, b) => (['closed', 'all'].includes(filter) ? b.id - a.id : a.id - b.id));
   $('#orders').replaceChildren(...(visible.length ? visible.map(orderCard) : [h('div', { class: 'empty' }, 'Brak zamówień.')]));
 }
 
 function orderCard(o) {
-  const wanted = PRINTERS.find((p) => p.id === o.printer)?.name || 'dowolna';
+  const buyer = users.find((u) => u.id === o.userId);
+  const wanted = PRINTERS.find((p) => p.id === o.printer)?.name || 'wszystko jedno';
   const fitInfo = o.dims
     ? PRINTERS.map((p) => `${p.name}: ${{ yes: 'tak', rotated: 'po obróceniu', no: 'nie' }[fits(o.dims, p.volume)]}`).join(', ')
     : '';
   const status = h('select', {}, ...Object.entries(STATUS).map(([value, label]) => h('option', { value, selected: value === o.status }, label)));
   const printer = h('select', {},
-    h('option', { value: '' }, '— nie przypisano —'),
+    h('option', { value: '' }, 'nie przypisano'),
     ...PRINTERS.map((p) => h('option', { value: p.id, selected: p.id === o.assignedPrinter }, p.name)));
-  const note = h('input', { type: 'text', maxLength: 500, value: o.teacherNote, placeholder: 'np. model za cienki, popraw ścianki' });
-  const rate = o.filament.pricePerMinute || 0;
   const minutes = h('input', { type: 'number', min: 1, step: 1, value: o.printMinutes ?? '', placeholder: 'z PrusaSlicer' });
+  const fee = h('input', { type: 'number', min: 0, step: 0.5, value: o.serviceFee || '', placeholder: '0' });
+  const link = h('input', { type: 'url', maxLength: 500, value: o.link || '', placeholder: 'https://… (np. model, który znaleźliśmy)' });
+  const note = h('input', { type: 'text', maxLength: 500, value: o.teacherNote, placeholder: 'np. znalazłem taki model, pasuje?' });
+  const paid = h('input', { type: 'checkbox', checked: !!o.paid });
   const price = h('span', { class: 'order-price' });
+  const message = h('span', { class: 'hint' });
+  const rate = orderRate(o);
   const showPrice = () => {
-    const m = Math.round(Number(minutes.value));
-    price.textContent = m >= 1 ? `${formatRate(rate)} × ${m} min = ${formatPrice(Math.round(m * rate * 100) / 100)}` : `Stawka: ${formatRate(rate)}`;
+    const m = Math.round(Number(minutes.value)) || 0;
+    const f = Number(fee.value) || 0;
+    const parts = [`${formatRate(rate)} × ${m} min`];
+    if (f) parts.push(`usługa ${formatPrice(f)}`);
+    price.textContent = m || f ? `${parts.join(' + ')} = ${formatPrice(Math.round((m * rate + f) * 100) / 100)}` : `Stawka: ${formatRate(rate)}. Wpisz czas druku.`;
   };
   minutes.addEventListener('input', showPrice);
+  fee.addEventListener('input', showPrice);
   showPrice();
-  const paid = h('input', { type: 'checkbox', checked: !!o.paid });
-  const message = h('span', { class: 'hint' });
 
-  const save = async () => {
+  const save = async (nextStatus) => {
+    if (nextStatus) status.value = nextStatus;
     try {
-      const { order } = await adminApi(`/api/admin/orders/${o.id}`, {
+      const result = await adminApi(`/api/admin/orders/${o.id}`, {
         method: 'PATCH',
         json: {
-          status: status.value, assignedPrinter: printer.value || null, teacherNote: note.value,
-          printMinutes: minutes.value === '' ? null : Number(minutes.value), paid: paid.checked,
+          status: status.value, assignedPrinter: printer.value || null, teacherNote: note.value, link: link.value,
+          printMinutes: minutes.value === '' ? null : Number(minutes.value), serviceFee: Number(fee.value) || 0, paid: paid.checked,
         },
       });
-      orders = orders.map((x) => (x.id === order.id ? order : x));
+      orders = orders.map((x) => (x.id === result.order.id ? result.order : x));
       renderOrders();
-    } catch (err) { message.textContent = err.message; }
+      if (result.mail) flash(MAIL[result.mail]);
+    } catch (err) {
+      status.value = o.status;
+      message.textContent = err.message;
+    }
   };
-  const quick = (label, next) => o.status !== next && h('button', {
-    type: 'button', class: 'small', onclick: () => { status.value = next; save(); },
-  }, label);
+  const quick = (label, next) => h('button', { type: 'button', class: 'small primary', onclick: () => save(next) }, label);
 
   return h('div', { class: 'order' },
-    h('div', { class: 'order-head' }, h('span', { class: 'title' }, `#${o.id} ${o.title}`), statusBadge(o.status)),
-    h('div', { class: 'order-meta' },
-      `${o.name} · ${formatDate(o.createdAt)} · chce: ${wanted} · `, swatch(o.filament.color), ` ${o.filament.name} · ${o.quantity} szt.`),
-    h('div', { class: 'order-meta' },
-      `${o.fileName} (${formatSize(o.fileSize)}) · wymiary: ${formatDims(o.dims)}${fitInfo ? ` · mieści się — ${fitInfo}` : ''}`),
-    o.handledBy && h('div', { class: 'order-meta' }, `Ostatnio obsługiwał(a): ${o.handledBy}`),
-    o.notes && h('div', { class: 'order-note' }, `Uwagi kupującego: ${o.notes}`),
+    h('div', { class: 'order-head' }, h('span', { class: 'num' }, orderNumber(o)), h('span', { class: 'title' }, o.title), statusBadge(o.status)),
+    h('div', { class: 'order-meta' }, `${o.name}`, buyer?.email && [' · ', h('a', { href: `mailto:${buyer.email}` }, buyer.email)],
+      ` · ${formatDate(o.createdAt)} · ${KIND[o.kind] || ''} · ${o.quantity} szt. · drukarka: ${wanted}`),
+    h('div', { class: 'order-meta' }, 'Kolory: ', colors(o), o.colorPlan && ` · ${o.colorPlan}`),
+    o.link && h('div', { class: 'order-meta' }, 'Model: ', h('a', { href: o.link, target: '_blank', rel: 'noopener' }, o.link)),
+    o.hasFile && h('div', { class: 'order-meta' },
+      `Plik: ${o.fileName} (${formatSize(o.fileSize)}) · ${formatDims(o.dims)}${fitInfo ? ` · mieści się: ${fitInfo}` : ''}`),
+    o.notes && h('div', { class: 'order-note' }, h('b', {}, 'Kupujący pisze: '), o.notes),
+    o.handledBy && h('div', { class: 'order-meta' }, `Ostatnio ruszał(a): ${o.handledBy}${o.printMinutes ? ` · druk ${formatMinutes(o.printMinutes)}` : ''}`),
     h('div', { class: 'admin-row' },
       h('div', {}, h('label', {}, 'Status'), status),
       h('div', {}, h('label', {}, 'Drukarka'), printer),
       h('div', {}, h('label', {}, 'Czas druku (min)'), minutes),
-      h('div', {}, h('label', {}, 'Wiadomość dla kupującego'), note)),
+      h('div', {}, h('label', {}, 'Opłata za usługę (zł)'), fee),
+      h('div', { class: 'wide' }, h('label', {}, 'Link do modelu'), link),
+      h('div', { class: 'wide' }, h('label', {}, 'Wiadomość dla kupującego'), note)),
     h('div', { class: 'actions' }, price, h('label', { class: 'check' }, paid, 'zapłacone')),
     h('div', { class: 'actions' },
-      h('button', { type: 'button', class: 'small primary', onclick: save }, 'Zapisz'),
-      o.status === 'new' && quick('▶ Drukuj', 'printing'),
-      o.status === 'printing' && quick('✓ Gotowe', 'done'),
+      o.status === 'new' && quick('Wyślij do potwierdzenia', 'confirm'),
+      o.status === 'accepted' && quick('Drukuj', 'printing'),
+      o.status === 'printing' && quick('Gotowe', 'done'),
       o.status === 'done' && quick('Odebrane', 'collected'),
-      h('button', { type: 'button', class: 'small', onclick: () => download(o, message) }, 'Pobierz plik'),
+      h('button', { type: 'button', class: 'small', onclick: () => save() }, 'Zapisz'),
+      o.hasFile && h('button', { type: 'button', class: 'small', onclick: () => download(o, message) }, 'Pobierz plik'),
       h('button', { type: 'button', class: 'small danger', onclick: () => remove(o, message) }, 'Usuń'),
       message));
+}
+
+function flash(text) {
+  $('#totals').textContent = text;
+  setTimeout(renderOrders, 6000);
 }
 
 async function download(o, message) {
@@ -191,7 +222,7 @@ function renderUsers() {
       h('div', { class: 'order-head' }, h('span', { class: 'title' }, u.name),
         h('button', { type: 'button', class: 'small', onclick: () => resetPassword(u, message) }, 'Nowe hasło'),
         h('button', { type: 'button', class: 'small danger', onclick: () => removeUser(u, message) }, 'Usuń')),
-      h('div', { class: 'order-meta' }, `konto od ${formatDate(u.createdAt)} · zamówień: ${count} `, message));
+      h('div', { class: 'order-meta' }, u.email && [h('a', { href: `mailto:${u.email}` }, u.email), ' · '], `konto od ${formatDate(u.createdAt)} · zamówień: ${count} `, message));
   }) : [h('div', { class: 'empty' }, 'Nikt jeszcze nie założył konta.')]));
 }
 
@@ -260,19 +291,22 @@ $('#seller-form').addEventListener('submit', async (event) => {
 });
 
 // ---------- ustawienia ----------
-function filamentRow(f = { id: '', name: '', color: '#fa6831', available: true, pricePerMinute: 0.05 }) {
+function filamentRow(f = { id: '', name: '', note: '', color: '#fa6831', available: true, pricePerMinute: 0.05 }) {
   const row = h('div', { class: 'filament-row' },
     h('input', { type: 'color', value: f.color, title: 'Kolor' }),
-    h('input', { type: 'text', value: f.name, maxLength: 40, placeholder: 'np. PLA czerwony', required: true }),
+    h('input', { type: 'text', class: 'name', value: f.name, maxLength: 40, placeholder: 'np. PLA czerwony', required: true }),
     h('input', { type: 'number', class: 'rate', min: 0, max: 100, step: 0.001, value: f.pricePerMinute ?? 0, title: 'Stawka w zł za minutę druku', required: true }),
     h('span', { class: 'hint' }, 'zł/min'),
-    h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: f.available }), 'dostępny'),
-    h('button', { type: 'button', class: 'small danger', title: 'Usuń filament', onclick: () => row.remove() }, '✕'));
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: f.available }), 'jest'),
+    h('button', { type: 'button', class: 'small danger', title: 'Usuń filament', onclick: () => row.remove() }, '✕'),
+    h('input', { type: 'text', class: 'note', value: f.note || '', maxLength: 80, placeholder: 'opis dla kupujących, np. zwykły plastik, pasuje do większości rzeczy' }));
   row.dataset.id = f.id;
   return row;
 }
 
 function fillSettings(s) {
+  $('#shop-name').textContent = $('#shop-name-input').value = s.shopName;
+  $('#design-fee').value = s.designFeeFrom;
   $('#class-code').value = s.classCode;
   $('#max-active').value = s.maxActive;
   $('#max-file').value = s.maxFileMB;
@@ -283,13 +317,15 @@ function fillSettings(s) {
 $('#add-filament').addEventListener('click', () => {
   const row = filamentRow();
   $('#filaments').append(row);
-  row.querySelector('input[type=text]').focus();
+  row.querySelector('input.name').focus();
 });
 
 $('#settings-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   $('#settings-error').textContent = $('#settings-success').textContent = '';
   const body = {
+    shopName: $('#shop-name-input').value,
+    designFeeFrom: Number($('#design-fee').value),
     classCode: $('#class-code').value,
     maxActive: Number($('#max-active').value),
     maxFileMB: Number($('#max-file').value),
@@ -297,7 +333,8 @@ $('#settings-form').addEventListener('submit', async (event) => {
     filaments: [...document.querySelectorAll('.filament-row')].map((row) => ({
       id: row.dataset.id,
       color: row.querySelector('input[type=color]').value,
-      name: row.querySelector('input[type=text]').value,
+      name: row.querySelector('input.name').value,
+      note: row.querySelector('input.note').value,
       pricePerMinute: Number(row.querySelector('input.rate').value),
       available: row.querySelector('input[type=checkbox]').checked,
     })),

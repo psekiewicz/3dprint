@@ -12,17 +12,18 @@
 <body>
   <header class="top">
     <div class="inner">
-      <h1>Druk 3D — panel sprzedawcy</h1>
+      <a class="brand" href="./"><span id="shop-name">Drukarnia 3D</span></a>
+      <span class="tagline">zaplecze</span>
       <span class="who" id="who"></span>
       <button class="small" id="logout" hidden>Wyloguj</button>
     </div>
   </header>
 
-  <div class="demo-banner" id="demo-banner" hidden>Wersja pokazowa — dane zapisują się tylko w tej przeglądarce i nikt inny ich nie zobaczy.</div>
+  <div class="demo-banner" id="demo-banner" hidden>Wersja pokazowa. Wszystko zostaje w tej przeglądarce, maile nie wychodzą.</div>
 
   <main id="login" hidden>
     <form class="card narrow" id="login-form">
-      <h2>Logowanie</h2>
+      <h2>Zaplecze</h2>
       <label for="seller-name">Login sprzedawcy</label>
       <input type="text" id="seller-name" maxlength="60" autocomplete="username" autocapitalize="none" required>
       <label for="password">Hasło</label>
@@ -36,6 +37,7 @@
   <main id="app" hidden>
     <section class="card">
       <h2>Zamówienia</h2>
+      <div class="notice" id="mail-off" hidden>E-maile są wyłączone, bo serwer nie ma ustawionej skrzynki (SMTP). Kupujący zobaczą cenę tylko na stronie. Instrukcja jest w README.</div>
       <div class="tabs" id="tabs"></div>
       <p class="hint" id="totals"></p>
       <div class="orders" id="orders"></div>
@@ -54,8 +56,7 @@
       <form class="admin-row" id="seller-form">
         <div><label for="new-seller-name">Login</label><input type="text" id="new-seller-name" maxlength="60" autocomplete="off" required></div>
         <div><label for="new-seller-password">Hasło (min. 8 znaków)</label><input type="password" id="new-seller-password" minlength="8" autocomplete="new-password" required></div>
-        <div><label>&nbsp;</label><button>Dodaj sprzedawcę</button></div>
-        <div><span class="hint" id="seller-message"></span></div>
+        <div class="wide"><label>&nbsp;</label><button>Dodaj sprzedawcę</button> <span class="hint" id="seller-message"></span></div>
       </form>
     </section>
 
@@ -63,6 +64,14 @@
       <h2>Ustawienia</h2>
       <div class="grid2">
         <div>
+          <label for="shop-name-input">Nazwa sklepu</label>
+          <input type="text" id="shop-name-input" maxlength="40" required>
+          <p class="hint">Widać ją na górze strony i w podpisie maili.</p>
+
+          <label for="design-fee">Projekt na zamówienie: cena od (zł)</label>
+          <input type="number" id="design-fee" min="0" max="10000" step="0.5" required>
+          <p class="hint">Pokazujemy to kupującym jako „od…". Konkretną opłatę wpisujesz przy zamówieniu.</p>
+
           <label for="class-code">Kod klasy</label>
           <input type="text" id="class-code" maxlength="40" required>
           <p class="hint">Kupujący wpisują go tylko przy zakładaniu konta. Wielkość liter nie ma znaczenia.</p>
@@ -79,7 +88,7 @@
         </div>
         <div>
           <label>Filamenty i stawki</label>
-          <p class="hint">Stawka w zł za minutę druku. Cena zamówienia = stawka × czas druku.</p>
+          <p class="hint">Stawka w zł za minutę druku. Opis pod spodem widzą kupujący, więc pisz po ludzku, np. „zwykły plastik".</p>
           <div id="filaments"></div>
           <button type="button" class="small" id="add-filament">+ Dodaj filament</button>
         </div>

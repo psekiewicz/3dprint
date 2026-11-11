@@ -5,6 +5,10 @@ services:
     ports:
       # Tylko dla tego serwera (127.0.0.1) — do internetu wystawia go reverse proxy z HTTPS.
       - "127.0.0.1:3000:3000"
+    # Hasło do skrzynki i adresy trzymamy w pliku .env (wzór: .env.example).
+    env_file:
+      - path: .env
+        required: false
     environment:
       # Aplikacja stoi za reverse proxy, więc adres klienta bierze z nagłówka X-Forwarded-For.
       TRUST_PROXY: "1"

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zamówienia druku 3D</title>
+  <title>Druk 3D na zamówienie</title>
   <link rel="stylesheet" href="style.css">
   <script type="importmap">
     { "imports": { "three": "./vendor/three/build/three.module.min.js", "three/addons/": "./vendor/three/examples/jsm/" } }
@@ -14,81 +14,133 @@
 <body>
   <header class="top">
     <div class="inner">
-      <h1>Zamówienia druku 3D</h1>
+      <a class="brand" href="./"><span id="shop-name">Drukarnia 3D</span></a>
+      <span class="tagline">drukujemy to, co wymyślisz</span>
       <span class="who" id="who"></span>
       <button class="small" id="logout" hidden>Wyloguj</button>
     </div>
   </header>
-
-  <div class="demo-banner" id="demo-banner" hidden>Wersja pokazowa — dane zapisują się tylko w tej przeglądarce i nikt inny ich nie zobaczy.</div>
+  <div class="demo-banner" id="demo-banner" hidden>Wersja pokazowa. Wszystko zostaje w tej przeglądarce, nikt inny tego nie zobaczy.</div>
 
   <main id="login" hidden>
     <form class="card narrow" id="login-form">
-      <h2 id="login-title">Logowanie</h2>
+      <h2 id="login-title">Zaloguj się</h2>
       <label for="login-name">Imię i nazwisko</label>
       <input type="text" id="login-name" maxlength="60" autocomplete="username" required>
+      <div id="register-email" hidden>
+        <label for="login-email">E-mail</label>
+        <input type="email" id="login-email" maxlength="120" autocomplete="email">
+        <p class="hint">Tu przyjdzie cena do potwierdzenia i info, że wydruk czeka. Żadnego spamu.</p>
+      </div>
       <label for="login-password">Hasło</label>
       <input type="password" id="login-password" minlength="6" maxlength="100" autocomplete="current-password" required>
       <div id="register-fields" hidden>
-        <p class="hint">Co najmniej 6 znaków. Nie używaj hasła, którego używasz gdzie indziej.</p>
+        <p class="hint">Minimum 6 znaków. Wymyśl nowe, nie dawaj tego od Instagrama.</p>
         <label for="login-code">Kod klasy</label>
         <input type="text" id="login-code" maxlength="40" autocomplete="off" autocapitalize="none">
-        <p class="hint">Dostaniesz go od sprzedawcy. Jest potrzebny tylko przy zakładaniu konta.</p>
+        <p class="hint">Dostaniesz go od nas w klasie. Potrzebny tylko raz, przy zakładaniu konta.</p>
       </div>
-      <p class="hint" id="forgot">Nie pamiętasz hasła? Poproś sprzedawcę o ustawienie nowego.</p>
+      <p class="hint" id="forgot">Hasło wyleciało z głowy? Złap któregoś z nas, ustawimy nowe.</p>
       <div class="message error" id="login-error"></div>
       <div class="actions">
         <button class="primary" id="login-submit">Zaloguj</button>
-        <button type="button" id="toggle-register">Załóż konto</button>
+        <button type="button" id="toggle-register">Nie mam konta</button>
       </div>
-      <div class="actions"><button type="button" class="small" id="open-demo">Otwórz wersję pokazową</button></div>
+      <div class="actions"><button type="button" class="small ghost" id="open-demo">Tylko się rozglądam (wersja pokazowa)</button></div>
     </form>
   </main>
 
   <main id="app" hidden>
+    <a class="pending" id="pending" href="#orders" hidden></a>
+    <ol class="steps">
+      <li><b>Mówisz, co chcesz</b>Wklejasz link, wrzucasz plik albo po prostu opisujesz. Nie musisz się znać na druku 3D.</li>
+      <li><b>Dostajesz cenę</b>Sprawdzamy model i wysyłamy maila z ceną. Bez Twojego OK nic nie drukujemy.</li>
+      <li><b>Odbierasz w szkole</b>Dajemy znać, kiedy gotowe. Płacisz przy odbiorze.</li>
+    </ol>
+
     <form class="card" id="order-form">
       <h2>Nowe zamówienie</h2>
       <div class="grid2">
         <div>
-          <label for="file">Model (STL lub 3MF)</label>
-          <div class="drop" id="drop" tabindex="0" role="button">
-            <strong>Wybierz plik</strong> albo przeciągnij go tutaj
-            <div id="file-info"></div>
+          <h3><span class="num">1</span>Co drukujemy?</h3>
+          <div class="kinds" id="kinds">
+            <label class="kind"><input type="radio" name="kind" value="link" checked><span><b>Mam link</b>do modelu z internetu</span></label>
+            <label class="kind"><input type="radio" name="kind" value="find"><span><b>Znajdźcie mi model</b>opisujesz, my szukamy <i class="tag">gratis</i></span></label>
+            <label class="kind"><input type="radio" name="kind" value="design"><span><b>Zaprojektujcie mi</b>coś, czego nie ma w necie <i class="tag pay" id="design-tag">płatne</i></span></label>
+            <label class="kind"><input type="radio" name="kind" value="file"><span><b>Mam plik</b>STL albo 3MF</span></label>
           </div>
-          <input type="file" id="file" accept=".stl,.3mf" hidden>
 
-          <label for="title">Nazwa wydruku</label>
-          <input type="text" id="title" maxlength="80" placeholder="np. Uchwyt na telefon" required>
+          <div class="panel" data-kind="link">
+            <label for="link">Link do modelu</label>
+            <input type="url" id="link" maxlength="500" placeholder="https://www.printables.com/model/...">
+            <p class="hint">Tysiące darmowych modeli znajdziesz na
+              <a href="https://www.printables.com" target="_blank" rel="noopener">printables.com</a>,
+              <a href="https://makerworld.com" target="_blank" rel="noopener">makerworld.com</a> i
+              <a href="https://www.thingiverse.com" target="_blank" rel="noopener">thingiverse.com</a>.
+              Wybierz coś, skopiuj adres strony i wklej tutaj.</p>
+          </div>
+          <div class="panel" data-kind="find" hidden>
+            <p class="hint">Napisz niżej, czego szukasz. Przekopiemy internet, wyślemy Ci link do obejrzenia i dopiero po Twoim OK drukujemy. Za szukanie nie płacisz, tylko za wydruk.</p>
+          </div>
+          <div class="panel" data-kind="design" hidden>
+            <p class="hint">Nie ma tego w internecie? Zaprojektujemy od zera. <span id="design-info"></span> Najpierw dostaniesz cenę, potem bierzemy się do roboty.</p>
+          </div>
+          <div class="panel" data-kind="file" hidden>
+            <div class="drop" id="drop" tabindex="0" role="button">
+              <strong>Wybierz plik</strong> albo przeciągnij go tutaj
+              <div id="file-info"></div>
+            </div>
+            <input type="file" id="file" accept=".stl,.3mf" hidden>
+            <div id="preview" hidden></div>
+            <ul class="fit" id="fit"></ul>
+          </div>
 
-          <label>Drukarka</label>
-          <div class="choices" id="printers"></div>
+          <label for="title">Jak to nazwać?</label>
+          <input type="text" id="title" maxlength="80" placeholder="np. brelok z imieniem" required>
 
-          <label>Filament</label>
+          <label for="notes" id="notes-label">Uwagi (jak chcesz)</label>
+          <textarea id="notes" maxlength="1000"></textarea>
+
+          <h3><span class="num">2</span>W jakim kolorze?</h3>
           <div class="choices" id="filaments"></div>
-          <p class="hint">Cena = stawka filamentu × czas druku. Dokładną cenę zobaczysz w kolejce, gdy sprzedawca przygotuje model do druku.</p>
+          <p class="hint" id="color-hint"></p>
+          <div id="color-plan-box" hidden>
+            <label for="color-plan">Co ma być w którym kolorze?</label>
+            <textarea id="color-plan" maxlength="500" placeholder="np. smok czerwony, oczy białe, podstawka czarna"></textarea>
+          </div>
 
-          <label for="quantity">Liczba sztuk</label>
-          <input type="number" id="quantity" min="1" max="10" value="1" required style="max-width:120px">
+          <h3><span class="num">3</span>Ile sztuk?</h3>
+          <input type="number" id="quantity" min="1" max="10" value="1" required style="max-width:110px">
 
-          <label for="notes">Uwagi dla sprzedawcy (opcjonalnie)</label>
-          <textarea id="notes" maxlength="500" placeholder="np. potrzebne na piątek"></textarea>
+          <details class="advanced">
+            <summary>Znam się, chcę wybrać drukarkę</summary>
+            <div class="choices" id="printers"></div>
+          </details>
         </div>
-        <div>
-          <label>Podgląd</label>
-          <div id="preview">Tu pojawi się podgląd modelu</div>
-          <ul class="fit" id="fit"></ul>
-        </div>
+
+        <aside>
+          <div class="pricebox">
+            <h3>Ile to kosztuje?</h3>
+            <p>Płacisz za czas pracy drukarki. Im większa rzecz, tym dłużej się drukuje.</p>
+            <ul id="price-examples"></ul>
+            <p class="hint">Dokładną cenę dostaniesz mailem, zanim cokolwiek wydrukujemy. Jak Ci nie podpasuje, rezygnujesz i nic nie płacisz.</p>
+          </div>
+          <div class="pricebox plain">
+            <h3>Jak duże to może być?</h3>
+            <p id="size-info"></p>
+          </div>
+        </aside>
       </div>
       <div class="message error" id="order-error"></div>
       <div class="message success" id="order-success"></div>
       <div class="actions">
-        <button class="primary" id="submit">Złóż zamówienie</button>
+        <button class="primary big" id="submit">Wyślij zamówienie</button>
         <span class="hint" id="limit-info"></span>
       </div>
     </form>
 
     <section class="card">
-      <h2>Kolejka</h2>
+      <h2>Zamówienia</h2>
       <div class="tabs" id="tabs"></div>
       <div class="orders" id="orders"></div>
     </section>
