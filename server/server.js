@@ -59,10 +59,10 @@ if (fs.existsSync(DB_FILE)) {
       maxFileMB: 50,
       printers: { mini: true, mk4s: true },
       filaments: [
-        { id: 'f1', name: 'PLA czarny', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#1d1d1f', available: true, pricePerMinute: 0.05 },
-        { id: 'f2', name: 'PLA biały', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#f4f4f4', available: true, pricePerMinute: 0.05 },
-        { id: 'f3', name: 'PLA pomarańczowy', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#fa6831', available: true, pricePerMinute: 0.05 },
-        { id: 'f4', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.07 },
+        { id: 'f1', name: 'PLA czarny', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#1d1d1f', available: true, pricePerMinute: 0.1 },
+        { id: 'f2', name: 'PLA biały', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#f4f4f4', available: true, pricePerMinute: 0.1 },
+        { id: 'f3', name: 'PLA pomarańczowy', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#fa6831', available: true, pricePerMinute: 0.1 },
+        { id: 'f4', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.12 },
       ],
     },
   };

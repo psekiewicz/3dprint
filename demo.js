@@ -6,7 +6,7 @@ const PRINTERS = [
 ];
 const STATUSES = ['new', 'confirm', 'accepted', 'printing', 'done', 'collected', 'rejected', 'cancelled'];
 const ACTIVE = ['new', 'confirm', 'accepted', 'printing'];
-const KEY = 'demoDb2';
+const KEY = 'demoDb3';
 
 // Zapasowa pamięć na wypadek, gdy przeglądarka blokuje localStorage/IndexedDB (dane znikają po odświeżeniu).
 let memoryDb = null;
@@ -30,10 +30,10 @@ function load() {
       maxFileMB: 50,
       printers: { mini: true, mk4s: true },
       filaments: [
-        { id: 'f1', name: 'PLA czarny', note: plain, color: '#1d1d1f', available: true, pricePerMinute: 0.05 },
-        { id: 'f2', name: 'PLA biały', note: plain, color: '#f4f4f4', available: true, pricePerMinute: 0.05 },
-        { id: 'f3', name: 'PLA pomarańczowy', note: plain, color: '#fa6831', available: true, pricePerMinute: 0.05 },
-        { id: 'f4', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.07 },
+        { id: 'f1', name: 'PLA czarny', note: plain, color: '#1d1d1f', available: true, pricePerMinute: 0.1 },
+        { id: 'f2', name: 'PLA biały', note: plain, color: '#f4f4f4', available: true, pricePerMinute: 0.1 },
+        { id: 'f3', name: 'PLA pomarańczowy', note: plain, color: '#fa6831', available: true, pricePerMinute: 0.1 },
+        { id: 'f4', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.12 },
       ],
     },
   };

@@ -291,7 +291,7 @@ $('#seller-form').addEventListener('submit', async (event) => {
 });
 
 // ---------- ustawienia ----------
-function filamentRow(f = { id: '', name: '', note: '', color: '#fa6831', available: true, pricePerMinute: 0.05 }) {
+function filamentRow(f = { id: '', name: '', note: '', color: '#fa6831', available: true, pricePerMinute: 0.1 }) {
   const row = h('div', { class: 'filament-row' },
     h('input', { type: 'color', value: f.color, title: 'Kolor' }),
     h('input', { type: 'text', class: 'name', value: f.name, maxLength: 40, placeholder: 'np. PLA czerwony', required: true }),
