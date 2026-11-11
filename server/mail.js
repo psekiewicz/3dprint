@@ -3,7 +3,7 @@
 //
 // Zmienne środowiskowe:
 //   SMTP_HOST, SMTP_PORT (domyślnie 465), SMTP_USER, SMTP_PASS
-//   MAIL_FROM     — nadawca, np. "Drukarnia 3D <contact@example.com>" (domyślnie SMTP_USER)
+//   MAIL_FROM     — nadawca, np. "Druk 3D <contact@example.com>" (domyślnie SMTP_USER)
 //   MAIL_REPLY_TO — adres, na który trafiają odpowiedzi (gdy nadawcą jest np. noreply@)
 const { SMTP_HOST, SMTP_USER, SMTP_PASS } = process.env;
 const port = Number(process.env.SMTP_PORT) || 465;

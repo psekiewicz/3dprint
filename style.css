@@ -62,14 +62,14 @@ header.top .inner { display: flex; align-items: center; gap: 12px; flex-wrap: wr
   background: var(--yellow);
   color: var(--on-color);
   border: 2px solid var(--on-color);
-  padding: 2px 12px 3px;
+  padding: 1px 9px 2px;
   font-size: 1.35rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   transform: rotate(-1.5deg);
   box-shadow: 3px 3px 0 var(--accent);
 }
-.tagline { color: var(--muted); font-size: 0.92rem; flex: 1; min-width: 0; }
+.spacer { flex: 1; }
 header.top .who { font-weight: 700; font-size: 0.92rem; }
 .demo-banner { background: var(--ink); color: var(--paper); text-align: center; padding: 6px 16px; font-size: 0.88rem; font-weight: 600; }
 
@@ -94,7 +94,7 @@ a.pending:hover { color: var(--on-color); }
 
 /* ---------- jak to działa ---------- */
 .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; counter-reset: step; }
-.steps li { counter-increment: step; position: relative; padding: 4px 0 0 46px; font-size: 0.93rem; color: var(--muted); }
+.steps li { counter-increment: step; position: relative; padding: 0 0 0 40px; min-height: 2.5rem; display: flex; align-items: center; }
 .steps li::before {
   content: counter(step); position: absolute; left: 0; top: 0;
   font: 800 2.5rem/1 'Bricolage Grotesque', sans-serif; color: var(--accent);
@@ -104,6 +104,7 @@ a.pending:hover { color: var(--on-color); }
 
 /* ---------- pola ---------- */
 label { display: block; font-weight: 700; font-size: 0.92rem; margin: 16px 0 5px; }
+label small { font-weight: 400; color: var(--muted); }
 label:first-child { margin-top: 0; }
 input[type=text], input[type=password], input[type=number], input[type=url], input[type=email], select, textarea {
   width: 100%;
@@ -162,7 +163,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   cursor: pointer;
   font-size: 0.88rem; color: var(--muted);
 }
-.kind b { display: block; color: var(--ink); font-size: 1rem; font-weight: 800; }
+.kind b { display: block; margin-bottom: 2px; color: var(--ink); font-size: 1rem; font-weight: 800; }
 .kind input:checked + span { background: var(--yellow); color: var(--on-color); border-color: var(--on-color); box-shadow: 3px 3px 0 var(--on-color); }
 .kind input:checked + span b { color: var(--on-color); }
 .kind input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
@@ -245,8 +246,7 @@ aside { display: grid; gap: 18px; }
 .order-price { font-weight: 700; margin-top: 8px; }
 .order .hint { margin-top: 8px; }
 .order .actions { margin-top: 12px; }
-.confirm-box { margin-top: 12px; padding-top: 12px; border-top: 2px dashed var(--ink); }
-.confirm-box p { margin: 0; font-weight: 600; }
+.confirm-box .actions { margin-top: 12px; }
 
 .badge {
   font: 700 0.72rem var(--mono); text-transform: uppercase; letter-spacing: 0.02em;

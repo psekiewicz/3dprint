@@ -52,7 +52,6 @@ if (fs.existsSync(DB_FILE)) {
     users: [],
     nextUserId: 1,
     settings: {
-      shopName: 'Drukarnia 3D',
       designFeeFrom: 10,
       classCode: randomCode(6).toLowerCase(),
       adminPassword: hashPassword(password),
@@ -77,7 +76,7 @@ if (fs.existsSync(DB_FILE)) {
 // uzupełnienie baz utworzonych przez starsze wersje
 db.users ||= [];
 db.nextUserId ||= 1;
-db.settings.shopName ??= 'Drukarnia 3D';
+delete db.settings.shopName;
 db.settings.designFeeFrom ??= 10;
 for (const o of db.orders) {
   o.filaments ||= o.filament ? [o.filament] : [];
@@ -149,7 +148,6 @@ function header(req, name) {
 function publicConfig() {
   const s = db.settings;
   return {
-    shopName: s.shopName,
     designFeeFrom: s.designFeeFrom,
     printers: PRINTERS.map((p) => ({ ...p, enabled: !!s.printers[p.id] })),
     filaments: s.filaments,
@@ -199,7 +197,6 @@ const duration = (m) => (m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${
 function orderMail(order, kind) {
   const user = db.users.find((u) => u.id === order.userId);
   if (!user || !user.email) return Promise.resolve('off');
-  const shop = db.settings.shopName;
   const where = PUBLIC_URL ? `Wejdź na ${PUBLIC_URL}` : 'Wejdź na stronę z zamówieniami';
   const lines = [`Cześć ${firstName(user.name)},`, ''];
   let subject;
@@ -219,7 +216,6 @@ function orderMail(order, kind) {
     if (order.price != null && !order.paid) lines.push(`Do zapłaty: ${money(order.price)}.`);
     if (order.teacherNote) lines.push('', `Od nas: ${order.teacherNote}`);
   }
-  lines.push('', shop);
   return mail.send({ to: user.email, subject, text: lines.join('\n') });
 }
 
@@ -557,7 +553,6 @@ async function api(req, res, url) {
       const body = await readJson(req);
       const s = db.settings;
       const classCode = text(body.classCode, 40);
-      const shopName = text(body.shopName, 40) || 'Drukarnia 3D';
       const designFeeFrom = Math.round(Number(body.designFeeFrom) * 100) / 100;
       if (!(designFeeFrom >= 0 && designFeeFrom <= 10000)) fail(400, 'Cena projektu: od 0 zł.');
       const maxActive = Math.floor(Number(body.maxActive));
@@ -575,7 +570,7 @@ async function api(req, res, url) {
         pricePerMinute: cleanRate(f.pricePerMinute),
       })).filter((f) => f.name);
       Object.assign(s, {
-        shopName, designFeeFrom, classCode, maxActive, maxFileMB, filaments,
+        designFeeFrom, classCode, maxActive, maxFileMB, filaments,
         printers: Object.fromEntries(PRINTERS.map((p) => [p.id, !!(body.printers && body.printers[p.id])])),
       });
       saveNow();

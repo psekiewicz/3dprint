@@ -12,23 +12,22 @@
 <body>
   <header class="top">
     <div class="inner">
-      <a class="brand" href="./"><span id="shop-name">Drukarnia 3D</span></a>
-      <span class="tagline">zaplecze</span>
+      <a class="brand" href="./" aria-label="Strona główna"><span>3D</span></a>
+      <span class="spacer"></span>
       <span class="who" id="who"></span>
       <button class="small" id="logout" hidden>Wyloguj</button>
     </div>
   </header>
 
-  <div class="demo-banner" id="demo-banner" hidden>Wersja pokazowa. Wszystko zostaje w tej przeglądarce, maile nie wychodzą.</div>
+  <div class="demo-banner" id="demo-banner" hidden>Wersja pokazowa</div>
 
   <main id="login" hidden>
     <form class="card narrow" id="login-form">
-      <h2>Zaplecze</h2>
+      <h2>Panel</h2>
       <label for="seller-name">Login sprzedawcy</label>
       <input type="text" id="seller-name" maxlength="60" autocomplete="username" autocapitalize="none" required>
       <label for="password">Hasło</label>
       <input type="password" id="password" autocomplete="current-password" required>
-      <p class="hint">Wersja pokazowa: dowolny login i hasło <strong>demo</strong>.</p>
       <div class="message error" id="login-error"></div>
       <div class="actions"><button class="primary">Zaloguj</button></div>
     </form>
@@ -37,7 +36,7 @@
   <main id="app" hidden>
     <section class="card">
       <h2>Zamówienia</h2>
-      <div class="notice" id="mail-off" hidden>E-maile są wyłączone, bo serwer nie ma ustawionej skrzynki (SMTP). Kupujący zobaczą cenę tylko na stronie. Instrukcja jest w README.</div>
+      <div class="notice" id="mail-off" hidden>E-maile wyłączone: brak ustawień SMTP (patrz README).</div>
       <div class="tabs" id="tabs"></div>
       <p class="hint" id="totals"></p>
       <div class="orders" id="orders"></div>
@@ -45,13 +44,11 @@
 
     <section class="card">
       <h2>Konta kupujących</h2>
-      <p class="hint">Gdy ktoś zapomni hasła, ustaw mu nowe. Usunięcie konta nie usuwa jego zamówień.</p>
       <div class="orders" id="users"></div>
     </section>
 
     <section class="card">
       <h2>Sprzedawcy</h2>
-      <p class="hint">Każdy sprzedawca ma własny login i hasło do tego panelu. Przy zamówieniu widać, kto je ostatnio obsługiwał.</p>
       <div class="orders" id="sellers"></div>
       <form class="admin-row" id="seller-form">
         <div><label for="new-seller-name">Login</label><input type="text" id="new-seller-name" maxlength="60" autocomplete="off" required></div>
@@ -64,17 +61,11 @@
       <h2>Ustawienia</h2>
       <div class="grid2">
         <div>
-          <label for="shop-name-input">Nazwa sklepu</label>
-          <input type="text" id="shop-name-input" maxlength="40" required>
-          <p class="hint">Widać ją na górze strony i w podpisie maili.</p>
-
           <label for="design-fee">Projekt na zamówienie: cena od (zł)</label>
           <input type="number" id="design-fee" min="0" max="10000" step="0.5" required>
-          <p class="hint">Pokazujemy to kupującym jako „od…". Konkretną opłatę wpisujesz przy zamówieniu.</p>
 
           <label for="class-code">Kod klasy</label>
           <input type="text" id="class-code" maxlength="40" required>
-          <p class="hint">Kupujący wpisują go tylko przy zakładaniu konta. Wielkość liter nie ma znaczenia.</p>
 
           <label for="max-active">Limit aktywnych zamówień na osobę</label>
           <input type="number" id="max-active" min="1" max="50" required>
@@ -88,7 +79,6 @@
         </div>
         <div>
           <label>Filamenty i stawki</label>
-          <p class="hint">Stawka w zł za minutę druku. Opis pod spodem widzą kupujący, więc pisz po ludzku, np. „zwykły plastik".</p>
           <div id="filaments"></div>
           <button type="button" class="small" id="add-filament">+ Dodaj filament</button>
         </div>

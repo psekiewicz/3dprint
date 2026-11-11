@@ -88,7 +88,7 @@ $('#login-form').addEventListener('submit', async (event) => {
   $('#login-error').textContent = '';
   try {
     if (registering) {
-      if (checkEmail()) { $('#login-error').textContent = 'Zerknij na adres e-mail wyżej.'; return; }
+      if (checkEmail()) { $('#login-error').textContent = 'Sprawdź e-mail.'; return; }
       const problem = emailError($('#login-email').value.trim());
       if (problem) { $('#login-error').textContent = problem; return; }
       await signIn('/api/register', { ...body, email: $('#login-email').value.trim() },
@@ -120,21 +120,18 @@ async function start() {
     config = await api('/api/config');
     await loadOrders();
   } catch (err) {
-    return showLogin(err.status === 401 ? 'Zaloguj się jeszcze raz.' : err.message);
+    return showLogin(err.status === 401 ? 'Zaloguj się ponownie.' : err.message);
   }
   $('#login').hidden = true;
   $('#app').hidden = false;
   $('#logout').hidden = false;
   $('#who').textContent = user.name;
-  $('#shop-name').textContent = config.shopName;
-  document.title = config.shopName;
   const fee = formatPrice(config.designFeeFrom);
   $('#design-tag').textContent = `od ${fee}`;
-  $('#design-info').textContent = `Projekt kosztuje od ${fee}, zależnie od tego, jak jest trudny.`;
   const biggest = config.printers.filter((p) => p.enabled).sort((a, b) => b.volume[0] - a.volume[0])[0];
   $('#size-info').textContent = biggest
-    ? `Maksymalnie około ${biggest.volume.map((v) => v / 10).join(' × ')} cm. Większe rzeczy da się czasem wydrukować w częściach i skleić.`
-    : 'Drukarki mają teraz przerwę. Zapytaj nas, kiedy wracają.';
+    ? `Do ${biggest.volume.map((v) => v / 10).join(' × ')} cm.`
+    : 'Drukarki mają przerwę.';
   renderKind();
   renderChoices();
 }
@@ -152,10 +149,10 @@ function chip(type, group, value, label, { isChecked = false, disabled = false }
 }
 
 const NOTES = {
-  link: ['Uwagi (jak chcesz)', 'np. ma mieć ok. 8 cm, potrzebuję na piątek'],
-  file: ['Uwagi (jak chcesz)', 'np. potrzebuję na piątek'],
-  find: ['Czego szukamy?', 'np. podstawka pod telefon z kotem, taka żeby stała na biurku, ok. 10 cm'],
-  design: ['Co mamy zaprojektować?', 'np. brelok z napisem KUBA, 5 cm, z dziurką na kółko'],
+  link: ['Uwagi', 'np. 8 cm, na piątek'],
+  file: ['Uwagi', 'np. na piątek'],
+  find: ['Czego szukamy?', 'np. podstawka pod telefon z kotem, ok. 10 cm'],
+  design: ['Co mamy zaprojektować?', 'np. brelok z napisem KUBA, 5 cm'],
 };
 function renderKind() {
   const current = kind();
@@ -181,11 +178,11 @@ function renderChoices() {
     ? available.map((f) => chip('checkbox', 'filament', f.id,
       [swatch(f.color), h('span', {}, h('b', {}, f.name), f.note && h('small', {}, f.note))],
       { isChecked: picked.includes(f.id), disabled: !picked.includes(f.id) && picked.length >= maxColors }))
-    : [h('span', { class: 'hint' }, 'Chwilowo nie mamy żadnego filamentu. Daj nam znać!')]));
+    : [h('span', { class: 'hint' }, 'Brak filamentu.')]));
   $('#filaments').onchange = renderChoices;
   $('#color-hint').textContent = maxColors > 1
-    ? `Jeden kolor w zupełności wystarczy. Możesz zaznaczyć do ${maxColors}, ale wielokolorowy wydruk trwa dłużej, więc wychodzi drożej.`
-    : 'Wybierz jeden kolor.';
+    ? `Do ${maxColors} kolorów. Więcej kolorów, dłuższy druk.`
+    : '';
   $('#color-plan-box').hidden = picked.length < 2;
   $('#color-plan').required = picked.length > 1;
 
@@ -193,7 +190,7 @@ function renderChoices() {
   const selected = checked('printer')[0] ?? 'any';
   const ok = (p) => fits(dims, p.volume) !== 'no' && p.maxColors >= Math.max(1, picked.length);
   const options = [
-    { id: 'any', name: 'Wszystko jedno', ok: enabled.some(ok) },
+    { id: 'any', name: 'Dowolna', ok: enabled.some(ok) },
     ...enabled.map((p) => ({ id: p.id, name: `${p.name} (do ${p.volume.map((v) => v / 10).join(' × ')} cm${p.maxColors > 1 ? `, do ${p.maxColors} kolorów` : ''})`, ok: ok(p) })),
   ];
   const pick = options.find((o) => o.id === selected && o.ok) || options.find((o) => o.ok);
@@ -204,12 +201,12 @@ function renderChoices() {
   const rates = (picked.length ? available.filter((f) => picked.includes(f.id)) : available).map((f) => f.pricePerMinute || 0);
   const rate = picked.length ? Math.max(0, ...rates) : Math.min(...(rates.length ? rates : [0]));
   $('#price-examples').replaceChildren(...[
-    ['mały brelok', 30], ['figurka wielkości dłoni', 180], ['coś dużego', 480],
-  ].map(([what, minutes]) => h('li', {}, h('span', {}, `${what}, ok. ${minutes < 60 ? `${minutes} min` : `${minutes / 60} h`}`), h('b', {}, `ok. ${formatPrice(minutes * rate)}`))));
+    ['brelok', 30], ['figurka', 180], ['coś dużego', 480],
+  ].map(([what, minutes]) => h('li', {}, h('span', {}, `${what} (${minutes < 60 ? `${minutes} min` : `${minutes / 60} h`})`), h('b', {}, `~${formatPrice(minutes * rate)}`))));
 
   const mine = orders.filter((o) => isMine(o) && isActive(o)).length;
   $('#limit-info').textContent = mine >= config.maxActive
-    ? `Masz już ${mine} zamówienia w toku. Kolejne złożysz, gdy któreś będzie gotowe.`
+    ? `Limit: ${config.maxActive} zamówienia naraz.`
     : '';
   $('#submit').disabled = mine >= config.maxActive;
   updateBed();
@@ -245,8 +242,8 @@ async function selectFile(file) {
   model = null;
   if (!file) return;
   const extension = file.name.split('.').pop().toLowerCase();
-  if (!['stl', '3mf'].includes(extension)) return fileError('Przyjmujemy tylko pliki STL i 3MF. Masz coś innego? Wklej link albo opisz, co to jest.');
-  if (file.size > config.maxFileMB * 1048576) return fileError(`Ten plik jest za duży (limit to ${config.maxFileMB} MB).`);
+  if (!['stl', '3mf'].includes(extension)) return fileError('Tylko STL i 3MF.');
+  if (file.size > config.maxFileMB * 1048576) return fileError(`Za duży plik (limit ${config.maxFileMB} MB).`);
 
   $('#file-info').textContent = `${file.name} · ${formatSize(file.size)}`;
   if (!$('#title').value) $('#title').value = file.name.replace(/\.[^.]+$/, '').slice(0, 80);
@@ -267,12 +264,12 @@ async function selectFile(file) {
       viewer ??= new viewerModule.Viewer(preview);
       viewer.show(object, bedVolume());
     } catch {
-      preview.textContent = 'Podgląd 3D nie działa w tej przeglądarce, ale zamówienie i tak możesz wysłać.';
+      preview.textContent = 'Brak podglądu 3D w tej przeglądarce.';
     }
   } catch {
     if (model?.file !== file) return;
     viewer = null;
-    fileError('Nie umiemy otworzyć tego pliku. Jest uszkodzony albo to nie STL/3MF.');
+    fileError('Nie da się otworzyć tego pliku.');
   }
 }
 
@@ -303,11 +300,11 @@ $('#order-form').addEventListener('submit', async (event) => {
   const filaments = checked('filament');
   const printer = checked('printer')[0];
   if (current === 'file' && !model) { error.textContent = 'Wybierz plik z modelem.'; return; }
-  if (!filaments.length) { error.textContent = 'Zaznacz chociaż jeden kolor.'; return; }
+  if (!filaments.length) { error.textContent = 'Wybierz kolor.'; return; }
   if (!printer) {
     error.textContent = current === 'file' && model?.dims
-      ? 'Ten model jest za duży na nasze drukarki. Napisz do nas, może da się go zmniejszyć albo podzielić.'
-      : 'Tylu kolorów naraz nie damy rady wydrukować.';
+      ? 'Model jest za duży na nasze drukarki.'
+      : 'Za dużo kolorów.';
     return;
   }
 
@@ -331,7 +328,7 @@ $('#order-form').addEventListener('submit', async (event) => {
       headers: { ...authHeaders(), 'X-Order': encodeURIComponent(JSON.stringify(meta)), 'Content-Type': 'application/octet-stream' },
       body: current === 'file' ? model.file : undefined,
     });
-    success.textContent = `Mamy to! Zamówienie ${orderNumber(result.order)} poszło. Odezwiemy się z ceną${user.email ? ` na ${user.email}` : ''}.`;
+    success.textContent = `Zamówienie ${orderNumber(result.order)} wysłane. Cenę dostaniesz mailem.`;
     for (const id of ['#title', '#notes', '#link', '#color-plan', '#file']) $(id).value = '';
     for (const box of document.querySelectorAll('input[name=filament]')) box.checked = false;
     $('#quantity').value = 1;
@@ -356,10 +353,7 @@ const FILTERS = {
   all: ['Wszystkie', () => true],
 };
 const HINT = {
-  new: 'Sprawdzamy i liczymy cenę. Odezwiemy się mailem.',
-  accepted: 'Potwierdzone. Czeka na swoją kolej do druku.',
-  printing: 'Drukarka właśnie nad tym pracuje.',
-  done: 'Gotowe! Złap nas w szkole i odbierz.',
+  done: 'Odbierz w szkole.',
 };
 
 function renderOrders() {
@@ -375,8 +369,8 @@ function renderOrders() {
   visible.sort((a, b) => waits(a) - waits(b) || (filter === 'queue' ? a.id - b.id : b.id - a.id));
   const pending = orders.filter((o) => waits(o) === 0).length;
   $('#pending').hidden = !pending;
-  $('#pending').textContent = pending === 1 ? 'Masz wycenę do potwierdzenia. Zjedź na dół strony ↓' : `Masz ${pending} wyceny do potwierdzenia. Zjedź na dół strony ↓`;
-  const empty = filter === 'mine' ? 'Nic tu jeszcze nie ma. Zamów coś wyżej!' : 'Pusto.';
+  $('#pending').textContent = `Do potwierdzenia: ${pending} ↓`;
+  const empty = 'Pusto.';
   $('#orders').replaceChildren(...(visible.length ? visible.map(orderCard) : [h('div', { class: 'empty' }, empty)]));
 }
 
@@ -394,13 +388,12 @@ function orderCard(o) {
     mine && o.price != null && h('div', { class: 'order-price' }, `Cena: ${priceText(o)} `,
       h('span', { class: `badge ${o.paid ? 'badge-done' : 'badge-new'}` }, o.paid ? 'zapłacone' : 'do zapłaty')),
     waiting && h('div', { class: 'confirm-box' },
-      h('p', {}, 'Zerknij na model i cenę. Pasuje? Bez Twojego kliknięcia nie ruszamy.'),
       h('div', { class: 'actions' },
-        h('button', { class: 'primary', type: 'button', onclick: () => act(o, 'confirm') }, 'Potwierdzam, drukujcie'),
+        h('button', { class: 'primary', type: 'button', onclick: () => act(o, 'confirm') }, 'Potwierdzam'),
         h('button', { class: 'danger', type: 'button', onclick: () => act(o, 'cancel') }, 'Rezygnuję'))),
     mine && !waiting && HINT[o.status] && h('div', { class: 'hint' }, HINT[o.status]),
     mine && o.status === 'new' && h('div', { class: 'actions' },
-      h('button', { class: 'small danger', type: 'button', onclick: () => act(o, 'cancel') }, 'Anuluj zamówienie')));
+      h('button', { class: 'small danger', type: 'button', onclick: () => act(o, 'cancel') }, 'Anuluj')));
 }
 
 async function act(order, action) {

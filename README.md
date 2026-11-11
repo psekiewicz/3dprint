@@ -26,7 +26,7 @@ Zamówienie przechodzi przez kolejne etapy:
 3. **Potwierdzone → Drukuje się → Do odbioru**: przy „Do odbioru" idzie drugi mail.
 4. **Odebrane**: zaznaczasz też „zapłacone".
 
-W panelu ustawiasz też nazwę sklepu, kod klasy, filamenty ze stawkami i opisami, dostępne drukarki, cenę „od" za projekt, limit zamówień na osobę oraz konta sprzedawców i kupujących.
+W panelu ustawiasz też kod klasy, filamenty ze stawkami i opisami, dostępne drukarki, cenę „od" za projekt, limit zamówień na osobę oraz konta sprzedawców i kupujących.
 
 ## Cena
 
@@ -44,7 +44,7 @@ Maile wychodzą z Twojej skrzynki przez SMTP. Potrzebne zmienne (wzór w `.env.e
 | `SMTP_PORT` | `465` | 465 (SSL) albo 587 (STARTTLS) |
 | `SMTP_USER` | `contact@pixelinventor.com` | login do skrzynki |
 | `SMTP_PASS` | | hasło do skrzynki |
-| `MAIL_FROM` | `Drukarnia 3D <contact@pixelinventor.com>` | nadawca widoczny w mailu |
+| `MAIL_FROM` | `Druk 3D <contact@pixelinventor.com>` | nadawca widoczny w mailu |
 | `MAIL_REPLY_TO` | | opcjonalnie: dokąd idą odpowiedzi |
 | `PUBLIC_URL` | `https://druk.pixelinventor.com` | adres strony do linku w mailu |
 

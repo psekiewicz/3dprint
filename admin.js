@@ -305,7 +305,6 @@ function filamentRow(f = { id: '', name: '', note: '', color: '#fa6831', availab
 }
 
 function fillSettings(s) {
-  $('#shop-name').textContent = $('#shop-name-input').value = s.shopName;
   $('#design-fee').value = s.designFeeFrom;
   $('#class-code').value = s.classCode;
   $('#max-active').value = s.maxActive;
@@ -324,7 +323,6 @@ $('#settings-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   $('#settings-error').textContent = $('#settings-success').textContent = '';
   const body = {
-    shopName: $('#shop-name-input').value,
     designFeeFrom: Number($('#design-fee').value),
     classCode: $('#class-code').value,
     maxActive: Number($('#max-active').value),

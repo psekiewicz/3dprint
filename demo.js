@@ -24,7 +24,6 @@ function load() {
     orders: [],
     users: [],
     settings: {
-      shopName: 'Drukarnia 3D',
       designFeeFrom: 10,
       classCode: 'demo',
       maxActive: 2,
@@ -98,7 +97,7 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
   switch (route) {
     case 'GET /api/config':
       return {
-        shopName: s.shopName, designFeeFrom: s.designFeeFrom,
+        designFeeFrom: s.designFeeFrom,
         printers: PRINTERS.map((p) => ({ ...p, enabled: !!s.printers[p.id] })),
         filaments: s.filaments, maxActive: s.maxActive, maxFileMB: s.maxFileMB,
       };
@@ -229,7 +228,6 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
       if (!(json.maxActive >= 1 && json.maxActive <= 50)) fail(400, 'Limit zamówień: od 1 do 50.');
       if (!(json.maxFileMB >= 1 && json.maxFileMB <= 200)) fail(400, 'Limit pliku: od 1 do 200 MB.');
       db.settings = {
-        shopName: clean(json.shopName, 40) || 'Drukarnia 3D',
         designFeeFrom: Math.max(0, Number(json.designFeeFrom) || 0),
         classCode: 'demo', // w wersji pokazowej kod i hasło są stałe
         maxActive: Math.floor(json.maxActive),
