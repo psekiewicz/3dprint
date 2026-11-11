@@ -65,7 +65,7 @@ Aplikacja słucha wtedy na `127.0.0.1:3000` tego serwera. Do internetu wystawia 
 |---|---|---|
 | `PORT` | `3000` | Port serwera |
 | `DATA_DIR` | `./data` | Katalog z bazą i plikami modeli |
-| `ADMIN_PASSWORD` | — | Ustawia hasło sprzedawcy przy starcie |
+| `ADMIN_PASSWORD` | — | Ustawia przy starcie hasło konta sprzedawcy `admin` |
 | `TRUST_PROXY` | — | `1`, gdy serwer stoi za reverse proxy (blokada błędnych logowań liczy wtedy prawdziwe adresy z `X-Forwarded-For`) |
 | `ALLOWED_ORIGIN` | `*` | Adres strony, która może korzystać z API (np. `https://psekiewicz.github.io`) |
 
@@ -84,6 +84,12 @@ Przydatne, gdy koledzy mają zamawiać także spoza sieci, w której stoi Raspbe
 4. Uruchom serwer z `ALLOWED_ORIGIN=https://psekiewicz.github.io`.
 
 Jeśli aplikacja ma działać tylko w jednej sieci, ten krok można pominąć — wystarczy adres Raspberry Pi.
+
+## Sprzedawcy
+
+Każdy sprzedawca ma własny login i hasło do panelu (`/admin.html`). Pierwsze konto ma login **`admin`** i hasło wypisane przy pierwszym uruchomieniu. Kolejnych sprzedawców dodajesz w panelu, w sekcji „Sprzedawcy". Przy zamówieniu widać, kto je ostatnio obsługiwał.
+
+Sprzedawcy są równorzędni: każdy może dodać lub usunąć innego, ale hasło zmienia tylko sobie. Gdy wszyscy zapomną haseł, uruchom serwer raz ze zmienną `ADMIN_PASSWORD` — ustawi hasło konta `admin` (i odtworzy je, jeśli zostało usunięte).
 
 ## Konta i bezpieczeństwo
 

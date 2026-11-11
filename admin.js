@@ -15,6 +15,8 @@ const FILTERS = {
 let token = sessionStorage.getItem('adminToken');
 let orders = [];
 let users = [];
+let sellers = [];
+let me = null;
 let filter = 'new';
 
 const auth = () => ({ Authorization: `Bearer ${token}` });
@@ -32,6 +34,7 @@ function showLogin() {
   sessionStorage.removeItem('adminToken');
   $('#app').hidden = true;
   $('#logout').hidden = true;
+  $('#who').textContent = '';
   $('#login').hidden = false;
 }
 
@@ -40,7 +43,7 @@ $('#login-form').addEventListener('submit', async (event) => {
   $('#login-error').textContent = '';
   setDemo($('#password').value === DEMO_CODE);
   try {
-    token = (await api('/api/admin/login', { method: 'POST', json: { password: $('#password').value } })).token;
+    token = (await api('/api/admin/login', { method: 'POST', json: { name: $('#seller-name').value.trim(), password: $('#password').value } })).token;
     sessionStorage.setItem('adminToken', token);
     $('#password').value = '';
     start();
@@ -53,7 +56,9 @@ $('#logout').addEventListener('click', showLogin);
 async function start() {
   if (!token) return showLogin();
   try {
-    const [o, s, u] = await Promise.all([adminApi('/api/admin/orders'), adminApi('/api/admin/settings'), adminApi('/api/admin/users')]);
+    const [o, s, u, a] = await Promise.all([adminApi('/api/admin/orders'), adminApi('/api/admin/settings'), adminApi('/api/admin/users'), adminApi('/api/admin/sellers')]);
+    sellers = a.sellers;
+    me = a.me;
     orders = o.orders;
     users = u.users;
     fillSettings(s.settings);
@@ -64,8 +69,10 @@ async function start() {
   $('#login').hidden = true;
   $('#app').hidden = false;
   $('#logout').hidden = false;
+  $('#who').textContent = sellers.find((x) => x.id === me)?.name || '';
   renderOrders();
   renderUsers();
+  renderSellers();
 }
 
 // ---------- zamówienia ----------
@@ -130,6 +137,7 @@ function orderCard(o) {
       `${o.name} · ${formatDate(o.createdAt)} · chce: ${wanted} · `, swatch(o.filament.color), ` ${o.filament.name} · ${o.quantity} szt.`),
     h('div', { class: 'order-meta' },
       `${o.fileName} (${formatSize(o.fileSize)}) · wymiary: ${formatDims(o.dims)}${fitInfo ? ` · mieści się — ${fitInfo}` : ''}`),
+    o.handledBy && h('div', { class: 'order-meta' }, `Ostatnio obsługiwał(a): ${o.handledBy}`),
     o.notes && h('div', { class: 'order-note' }, `Uwagi kupującego: ${o.notes}`),
     h('div', { class: 'admin-row' },
       h('div', {}, h('label', {}, 'Status'), status),
@@ -205,6 +213,52 @@ async function removeUser(u, message) {
   } catch (err) { message.textContent = `· ${err.message}`; }
 }
 
+// ---------- sprzedawcy ----------
+function renderSellers() {
+  $('#sellers').replaceChildren(...sellers.map((s) => {
+    const message = h('span', { class: 'hint' });
+    const mine = s.id === me;
+    return h('div', { class: 'order' },
+      h('div', { class: 'order-head' }, h('span', { class: 'title' }, mine ? `${s.name} (Ty)` : s.name),
+        mine
+          ? h('button', { type: 'button', class: 'small', onclick: () => changeMyPassword(message) }, 'Zmień moje hasło')
+          : h('button', { type: 'button', class: 'small danger', onclick: () => removeSeller(s, message) }, 'Usuń'),
+        message));
+  }));
+}
+
+async function changeMyPassword(message) {
+  const password = prompt('Twoje nowe hasło (co najmniej 8 znaków)');
+  if (password == null) return;
+  try {
+    await adminApi(`/api/admin/sellers/${me}/password`, { method: 'PUT', json: { password } });
+    message.textContent = 'hasło zmienione';
+  } catch (err) { message.textContent = err.message; }
+}
+
+async function removeSeller(s, message) {
+  if (!confirm(`Odebrać dostęp do panelu sprzedawcy: ${s.name}?`)) return;
+  try {
+    await adminApi(`/api/admin/sellers/${s.id}`, { method: 'DELETE' });
+    sellers = sellers.filter((x) => x.id !== s.id);
+    renderSellers();
+  } catch (err) { message.textContent = err.message; }
+}
+
+$('#seller-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const message = $('#seller-message');
+  try {
+    const { seller } = await adminApi('/api/admin/sellers', {
+      method: 'POST', json: { name: $('#new-seller-name').value, password: $('#new-seller-password').value },
+    });
+    sellers.push(seller);
+    renderSellers();
+    event.target.reset();
+    message.textContent = `Dodano: ${seller.name}`;
+  } catch (err) { message.textContent = err.message; }
+});
+
 // ---------- ustawienia ----------
 function filamentRow(f = { id: '', name: '', color: '#fa6831', available: true, pricePerMinute: 0.05 }) {
   const row = h('div', { class: 'filament-row' },
@@ -247,11 +301,9 @@ $('#settings-form').addEventListener('submit', async (event) => {
       pricePerMinute: Number(row.querySelector('input.rate').value),
       available: row.querySelector('input[type=checkbox]').checked,
     })),
-    newPassword: $('#new-password').value,
   };
   try {
     fillSettings((await adminApi('/api/admin/settings', { method: 'PUT', json: body })).settings);
-    $('#new-password').value = '';
     $('#settings-success').textContent = 'Zapisano.';
   } catch (err) {
     $('#settings-error').textContent = err.message;

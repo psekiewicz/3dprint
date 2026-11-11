@@ -13,6 +13,7 @@
   <header class="top">
     <div class="inner">
       <h1>Druk 3D — panel sprzedawcy</h1>
+      <span class="who" id="who"></span>
       <button class="small" id="logout" hidden>Wyloguj</button>
     </div>
   </header>
@@ -22,9 +23,11 @@
   <main id="login" hidden>
     <form class="card narrow" id="login-form">
       <h2>Logowanie</h2>
-      <label for="password">Hasło sprzedawcy</label>
+      <label for="seller-name">Login sprzedawcy</label>
+      <input type="text" id="seller-name" maxlength="60" autocomplete="username" autocapitalize="none" required>
+      <label for="password">Hasło</label>
       <input type="password" id="password" autocomplete="current-password" required>
-      <p class="hint">Hasło <strong>demo</strong> otwiera wersję pokazową.</p>
+      <p class="hint">Wersja pokazowa: dowolny login i hasło <strong>demo</strong>.</p>
       <div class="message error" id="login-error"></div>
       <div class="actions"><button class="primary">Zaloguj</button></div>
     </form>
@@ -44,6 +47,18 @@
       <div class="orders" id="users"></div>
     </section>
 
+    <section class="card">
+      <h2>Sprzedawcy</h2>
+      <p class="hint">Każdy sprzedawca ma własny login i hasło do tego panelu. Przy zamówieniu widać, kto je ostatnio obsługiwał.</p>
+      <div class="orders" id="sellers"></div>
+      <form class="admin-row" id="seller-form">
+        <div><label for="new-seller-name">Login</label><input type="text" id="new-seller-name" maxlength="60" autocomplete="off" required></div>
+        <div><label for="new-seller-password">Hasło (min. 8 znaków)</label><input type="password" id="new-seller-password" minlength="8" autocomplete="new-password" required></div>
+        <div><label>&nbsp;</label><button>Dodaj sprzedawcę</button></div>
+        <div><span class="hint" id="seller-message"></span></div>
+      </form>
+    </section>
+
     <form class="card" id="settings-form">
       <h2>Ustawienia</h2>
       <div class="grid2">
@@ -61,8 +76,6 @@
           <label>Dostępne drukarki</label>
           <div id="printers"></div>
 
-          <label for="new-password">Nowe hasło sprzedawcy</label>
-          <input type="password" id="new-password" autocomplete="new-password" placeholder="zostaw puste, aby nie zmieniać">
         </div>
         <div>
           <label>Filamenty i stawki</label>

@@ -63,18 +63,28 @@ if (fs.existsSync(DB_FILE)) {
   };
   saveNow();
   console.log('=== PIERWSZE URUCHOMIENIE ===');
+  console.log('Login sprzedawcy:  admin');
   console.log(`Hasło sprzedawcy:  ${password}`);
   console.log(`Kod klasy:         ${db.settings.classCode}`);
-  console.log('Oba można zmienić w panelu sprzedawcy (/admin.html).');
+  console.log('Zmienisz je w panelu sprzedawcy (/admin.html); tam też dodasz kolejnych sprzedawców.');
 }
 // uzupełnienie baz utworzonych przez starsze wersje
 db.users ||= [];
 db.nextUserId ||= 1;
 if (!db.settings.secret) { db.settings.secret = crypto.randomBytes(32).toString('hex'); saveNow(); }
 
-if (process.env.ADMIN_PASSWORD && !checkPassword(process.env.ADMIN_PASSWORD, db.settings.adminPassword)) {
-  db.settings.adminPassword = hashPassword(process.env.ADMIN_PASSWORD);
+// Sprzedawcy mają osobne konta; pierwsze („admin") powstaje z hasła z pierwszego uruchomienia.
+if (!db.admins) {
+  db.admins = [{ id: 1, name: 'admin', password: db.settings.adminPassword }];
+  db.nextAdminId = 2;
+  delete db.settings.adminPassword;
   saveNow();
+}
+// ADMIN_PASSWORD ustawia hasło konta „admin" (i odtwarza je, gdyby zostało usunięte) — ratunek po zapomnieniu haseł.
+if (process.env.ADMIN_PASSWORD) {
+  let main = db.admins.find((a) => a.name === 'admin');
+  if (!main) { main = { id: db.nextAdminId++, name: 'admin', password: '' }; db.admins.push(main); }
+  if (!checkPassword(process.env.ADMIN_PASSWORD, main.password)) { main.password = hashPassword(process.env.ADMIN_PASSWORD); saveNow(); }
 }
 
 function saveNow() {
@@ -148,7 +158,10 @@ const cleanRate = (value) => { const r = Math.round(Number(value) * 1000) / 1000
 
 
 // ---------- autoryzacja ----------
-const sessions = new Map(); // token -> czas wygaśnięcia
+const sessions = new Map(); // token -> { adminId, expires }
+const endSessions = (adminId, except) => { for (const [t, s] of sessions) if (s.adminId === adminId && t !== except) sessions.delete(t); };
+const adminToken = (req) => (req.headers.authorization || '').replace(/^Bearer /, '');
+const publicAdmin = (a) => ({ id: a.id, name: a.name });
 const loginFailures = new Map(); // ip -> { count, until }
 const SESSION_MS = 12 * 60 * 60 * 1000;
 
@@ -186,9 +199,11 @@ function throttle(req) {
 }
 const publicUser = (user) => ({ id: user.id, name: user.name, createdAt: user.createdAt });
 function requireAdmin(req) {
-  const token = (req.headers.authorization || '').replace(/^Bearer /, '');
-  const expires = sessions.get(token);
-  if (!expires || expires < Date.now()) { sessions.delete(token); fail(401, 'Zaloguj się ponownie.'); }
+  const token = adminToken(req);
+  const session = sessions.get(token);
+  const admin = session && session.expires > Date.now() && db.admins.find((a) => a.id === session.adminId);
+  if (!admin) { sessions.delete(token); fail(401, 'Zaloguj się ponownie.'); }
+  return admin;
 }
 
 // ---------- obsługa zamówień ----------
@@ -307,11 +322,12 @@ async function api(req, res, url) {
     case 'POST /api/admin/login': {
       const attempt = throttle(req);
       const body = await readJson(req);
-      if (!checkPassword(body.password || '', db.settings.adminPassword)) { attempt.failed(); fail(401, 'Niepoprawne hasło.'); }
+      const admin = db.admins.find((a) => nameKey(a.name) === nameKey(text(body.name, 60)));
+      if (!admin || !checkPassword(body.password || '', admin.password)) { attempt.failed(); fail(401, 'Niepoprawny login lub hasło.'); }
       attempt.ok();
       const token = crypto.randomBytes(32).toString('hex');
-      sessions.set(token, Date.now() + SESSION_MS);
-      return send(res, 200, { token });
+      sessions.set(token, { adminId: admin.id, expires: Date.now() + SESSION_MS });
+      return send(res, 200, { token, admin: publicAdmin(admin) });
     }
 
     case 'GET /api/admin/orders':
@@ -319,7 +335,7 @@ async function api(req, res, url) {
       return send(res, 200, { orders: db.orders.map(publicOrder) });
 
     case 'PATCH /api/admin/orders/:id': {
-      requireAdmin(req);
+      const admin = requireAdmin(req);
       const body = await readJson(req);
       const order = findOrder(id);
       if (body.status !== undefined) {
@@ -333,6 +349,7 @@ async function api(req, res, url) {
       if (body.teacherNote !== undefined) order.teacherNote = longText(body.teacherNote, 500);
       if (body.printMinutes !== undefined) setPrintTime(order, body.printMinutes, db.settings.filaments);
       if (body.paid !== undefined) order.paid = !!body.paid;
+      order.handledBy = admin.name;
       order.updatedAt = new Date().toISOString();
       saveNow();
       return send(res, 200, { order: publicOrder(order) });
@@ -360,6 +377,46 @@ async function api(req, res, url) {
       return fs.createReadStream(file).pipe(res);
     }
 
+    case 'GET /api/admin/sellers': {
+      const admin = requireAdmin(req);
+      return send(res, 200, { sellers: db.admins.map(publicAdmin), me: admin.id });
+    }
+
+    case 'POST /api/admin/sellers': {
+      requireAdmin(req);
+      const body = await readJson(req);
+      const name = text(body.name, 60);
+      if (name.length < 3) fail(400, 'Login musi mieć co najmniej 3 znaki.');
+      if (String(body.password || '').length < 8) fail(400, 'Hasło sprzedawcy musi mieć co najmniej 8 znaków.');
+      if (db.admins.some((a) => nameKey(a.name) === nameKey(name))) fail(409, 'Taki sprzedawca już istnieje.');
+      if (db.admins.length >= 10) fail(403, 'Osiągnięto limit sprzedawców.');
+      const seller = { id: db.nextAdminId++, name, password: hashPassword(String(body.password)) };
+      db.admins.push(seller);
+      saveNow();
+      return send(res, 201, { seller: publicAdmin(seller) });
+    }
+
+    case 'PUT /api/admin/sellers/:id/password': {
+      const admin = requireAdmin(req);
+      const body = await readJson(req);
+      if (admin.id !== Number(id)) fail(403, 'Możesz zmienić tylko własne hasło.');
+      if (String(body.password || '').length < 8) fail(400, 'Hasło sprzedawcy musi mieć co najmniej 8 znaków.');
+      admin.password = hashPassword(String(body.password));
+      endSessions(admin.id, adminToken(req));
+      saveNow();
+      return send(res, 200, { ok: true });
+    }
+
+    case 'DELETE /api/admin/sellers/:id': {
+      const admin = requireAdmin(req);
+      if (admin.id === Number(id)) fail(400, 'Nie możesz usunąć własnego konta.');
+      if (!db.admins.some((a) => a.id === Number(id))) fail(404, 'Nie ma takiego sprzedawcy.');
+      db.admins = db.admins.filter((a) => a.id !== Number(id));
+      endSessions(Number(id));
+      saveNow();
+      return send(res, 200, { ok: true });
+    }
+
     case 'GET /api/admin/users':
       requireAdmin(req);
       return send(res, 200, { users: db.users.map(publicUser) });
@@ -385,7 +442,7 @@ async function api(req, res, url) {
 
     case 'GET /api/admin/settings': {
       requireAdmin(req);
-      const { adminPassword, secret, ...settings } = db.settings;
+      const { secret, ...settings } = db.settings;
       return send(res, 200, { settings });
     }
 
@@ -407,16 +464,12 @@ async function api(req, res, url) {
         available: !!f.available,
         pricePerMinute: cleanRate(f.pricePerMinute),
       })).filter((f) => f.name);
-      if (body.newPassword) {
-        if (String(body.newPassword).length < 6) fail(400, 'Hasło musi mieć co najmniej 6 znaków.');
-        s.adminPassword = hashPassword(String(body.newPassword));
-      }
       Object.assign(s, {
         classCode, maxActive, maxFileMB, filaments,
         printers: Object.fromEntries(PRINTERS.map((p) => [p.id, !!(body.printers && body.printers[p.id])])),
       });
       saveNow();
-      const { adminPassword, secret, ...settings } = s;
+      const { secret, ...settings } = s;
       return send(res, 200, { settings });
     }
   }

@@ -157,7 +157,15 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
     }
 
     case 'POST /api/admin/login':
-      return { token: 'demo' };
+      return { token: 'demo', admin: { id: 1, name: clean(json.name, 60) || 'demo' } };
+
+    case 'GET /api/admin/sellers':
+      return { sellers: [{ id: 1, name: 'demo' }], me: 1 };
+
+    case 'POST /api/admin/sellers':
+    case 'PUT /api/admin/sellers/:id/password':
+    case 'DELETE /api/admin/sellers/:id':
+      fail(400, 'W wersji pokazowej nie da się zmieniać kont sprzedawców.');
 
     case 'PATCH /api/admin/orders/:id': {
       const order = find();
@@ -166,6 +174,7 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
       if (json.teacherNote !== undefined) order.teacherNote = String(json.teacherNote).trim().slice(0, 500);
       if (json.printMinutes !== undefined) setPrintTime(order, json.printMinutes, s.filaments);
       if (json.paid !== undefined) order.paid = !!json.paid;
+      order.handledBy = 'demo';
       order.updatedAt = new Date().toISOString();
       save(db);
       return { order: publicOrder(order) };
