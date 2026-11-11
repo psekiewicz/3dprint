@@ -43,7 +43,7 @@ export async function api(path, options = {}) {
     // Odpowiedź bez JSON-a z błędem 404/405 oznacza samą stronę (np. GitHub Pages) bez serwera zamówień.
     const noServer = !data && [404, 405, 501].includes(res.status);
     const err = new Error(noServer
-      ? 'Ta strona nie ma podłączonego serwera zamówień. Wpisz „demo", aby otworzyć wersję pokazową.'
+      ? 'Ta strona nie ma podłączonego serwera zamówień. Możesz otworzyć wersję pokazową.'
       : (data && data.error) || `Błąd serwera (${res.status}).`);
     err.status = res.status;
     throw err;

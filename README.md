@@ -2,9 +2,9 @@
 
 Prosty sklepik z wydrukami 3D dla kolegów z klasy, na drukarki **Prusa MINI+** i **Prusa MK4S**.
 
-**Kupujący** (`/`): podaje imię i nazwisko oraz kod klasy, wgrywa plik STL lub 3MF, widzi podgląd 3D i informację, czy model mieści się w drukarce, wybiera drukarkę i filament, a potem śledzi w kolejce status, cenę i to, czy zamówienie jest opłacone.
+**Kupujący** (`/`): zakłada konto (imię i nazwisko, własne hasło, kod klasy), wgrywa plik STL lub 3MF, widzi podgląd 3D i informację, czy model mieści się w drukarce, wybiera drukarkę i filament, a potem śledzi w kolejce status, cenę i to, czy zamówienie jest opłacone.
 
-**Sprzedawca** (`/admin.html`): pobiera pliki, wpisuje czas druku (z niego wylicza się cena), zmienia statusy, oznacza zapłatę, pisze wiadomość do kupującego oraz ustawia kod klasy, filamenty ze stawkami, dostępne drukarki i limit zamówień na osobę.
+**Sprzedawca** (`/admin.html`): pobiera pliki, wpisuje czas druku (z niego wylicza się cena), zmienia statusy, oznacza zapłatę, pisze wiadomość do kupującego zarządza kontami oraz ustawia kod klasy, filamenty ze stawkami, dostępne drukarki i limit zamówień na osobę.
 
 ## Cena
 
@@ -23,7 +23,7 @@ GitHub Pages hostuje tylko statyczne strony — nie przyjmie plików ani nie zap
 
 ## Wersja pokazowa (bez serwera)
 
-Na samym GitHub Pages aplikację można obejrzeć bez Raspberry Pi: wpisz kod klasy **`demo`** (a w panelu sprzedawcy hasło **`demo`**). Dane zapisują się wtedy tylko w tej jednej przeglądarce — kupujący i sprzedawca widzą te same zamówienia wyłącznie na tym samym urządzeniu. Do przyjmowania prawdziwych zamówień potrzebny jest serwer.
+Na samym GitHub Pages aplikację można obejrzeć bez Raspberry Pi: na stronie logowania kliknij **Otwórz wersję pokazową** (a w panelu sprzedawcy wpisz hasło **`demo`**). Hasła kont nie są w niej sprawdzane. Dane zapisują się wtedy tylko w tej jednej przeglądarce — kupujący i sprzedawca widzą te same zamówienia wyłącznie na tym samym urządzeniu. Do przyjmowania prawdziwych zamówień potrzebny jest serwer.
 
 ## Uruchomienie na Raspberry Pi
 
@@ -74,9 +74,16 @@ Przydatne, gdy koledzy mają zamawiać także spoza sieci, w której stoi Raspbe
 
 Jeśli aplikacja ma działać tylko w jednej sieci, ten krok można pominąć — wystarczy adres Raspberry Pi.
 
+## Konta i bezpieczeństwo
+
+- Każdy kupujący zakłada konto z własnym hasłem; kod klasy jest potrzebny tylko przy rejestracji. Zamówienia są przypisane do konta, więc nikt nie zamówi ani nie anuluje niczego w cudzym imieniu.
+- Hasła są przechowywane wyłącznie jako skróty (scrypt). Zapomniane hasło sprzedawca zastępuje nowym w panelu, w sekcji „Konta kupujących".
+- Ktoś, kto zna kod klasy, może założyć konto na cudze imię, zanim zrobi to właściciel. Wtedy usuń takie konto w panelu — prawdziwa osoba założy je ponownie.
+- Po 5 błędnych hasłach z jednego adresu logowanie jest blokowane na minutę.
+- Limit aktywnych zamówień liczy się na konto.
+- Bez HTTPS (np. `http://192.168…` w sieci lokalnej) hasła lecą przez sieć otwartym tekstem — kolejny powód, by nie używać tu hasła z innych serwisów.
+
 ## Dobrze wiedzieć
 
-- Limit zamówień liczy się po imieniu i nazwisku, więc kupujący może go obejść, wpisując inne dane — to zabezpieczenie „na uczciwość", nie przed sabotażem.
-- Zamówienie anulować może tylko kupujący na urządzeniu, z którego je złożył, i tylko dopóki ma status „Oczekuje".
 - Wymiary liczone są w przeglądarce przy założeniu, że model jest w milimetrach.
 - Podgląd 3D korzysta z biblioteki [three.js](https://threejs.org) (licencja MIT), dołączonej w `vendor/`, więc działa też bez internetu.
