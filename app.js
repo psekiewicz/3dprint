@@ -68,6 +68,7 @@ function checkEmail() {
 let emailTimer;
 $('#login-email').addEventListener('input', () => {
   $('#email-suggest').hidden = true;
+  $('#login-error').textContent = '';
   clearTimeout(emailTimer);
   emailTimer = setTimeout(checkEmail, 800);
 });
