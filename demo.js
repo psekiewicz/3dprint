@@ -6,7 +6,7 @@ const PRINTERS = [
 ];
 const STATUSES = ['new', 'confirm', 'accepted', 'printing', 'done', 'collected', 'rejected', 'cancelled'];
 const ACTIVE = ['new', 'confirm', 'accepted', 'printing'];
-const KEY = 'demoDb3';
+const KEY = 'demoDb4';
 
 // Zapasowa pamięć na wypadek, gdy przeglądarka blokuje localStorage/IndexedDB (dane znikają po odświeżeniu).
 let memoryDb = null;
@@ -25,15 +25,16 @@ function load() {
     users: [],
     settings: {
       designFeeFrom: 10,
+      minPrice: 5,
       classCode: 'demo',
       maxActive: 2,
       maxFileMB: 50,
       printers: { mini: true, mk4s: true },
       filaments: [
-        { id: 'f1', name: 'PLA czarny', note: plain, color: '#1d1d1f', available: true, pricePerMinute: 0.1 },
-        { id: 'f2', name: 'PLA biały', note: plain, color: '#f4f4f4', available: true, pricePerMinute: 0.1 },
-        { id: 'f3', name: 'PLA pomarańczowy', note: plain, color: '#fa6831', available: true, pricePerMinute: 0.1 },
-        { id: 'f4', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.12 },
+        { id: 'f1', printer: 'mk4s', name: 'PLA czarny', note: plain, color: '#1d1d1f', available: true, pricePerMinute: 0.1 },
+        { id: 'f2', printer: 'mk4s', name: 'PLA biały', note: plain, color: '#f4f4f4', available: true, pricePerMinute: 0.1 },
+        { id: 'f3', printer: 'mini', name: 'PLA pomarańczowy', note: plain, color: '#fa6831', available: true, pricePerMinute: 0.1 },
+        { id: 'f4', printer: 'mini', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.12 },
       ],
     },
   };
@@ -68,10 +69,10 @@ const clean = (value, max) => String(value ?? '').replace(/\s+/g, ' ').trim().sl
 const long = (value, max) => String(value ?? '').trim().slice(0, max);
 const nameKey = (name) => name.toLowerCase();
 const cleanRate = (value) => { const r = Math.round(Number(value) * 1000) / 1000; return r >= 0 && r <= 100 ? r : 0; };
-function reprice(order) {
+function reprice(order, minPrice) {
   if (order.printMinutes == null && !order.serviceFee) { order.price = null; return; }
   const rate = Math.max(0, ...order.filaments.map((f) => f.pricePerMinute || 0));
-  order.price = Math.round(((order.printMinutes || 0) * rate + (order.serviceFee || 0)) * 100) / 100;
+  order.price = Math.max(minPrice || 0, Math.round(((order.printMinutes || 0) * rate + (order.serviceFee || 0)) * 100) / 100);
 }
 function cleanLink(value) {
   const link = String(value ?? '').trim().slice(0, 500);
@@ -97,7 +98,7 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
   switch (route) {
     case 'GET /api/config':
       return {
-        designFeeFrom: s.designFeeFrom,
+        designFeeFrom: s.designFeeFrom, minPrice: s.minPrice,
         printers: PRINTERS.map((p) => ({ ...p, enabled: !!s.printers[p.id] })),
         filaments: s.filaments, maxActive: s.maxActive, maxFileMB: s.maxFileMB,
       };
@@ -124,13 +125,13 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
       const title = clean(meta.title, 80);
       const notes = long(meta.notes, 1000);
       const filaments = (meta.filaments || []).map((fid) => s.filaments.find((f) => f.id === fid && f.available));
-      const enabled = PRINTERS.filter((p) => s.printers[p.id]);
-      const chosen = meta.printer === 'any' ? enabled : enabled.filter((p) => p.id === meta.printer);
+      const printers = [...new Set(filaments.map((f) => f && f.printer))];
+      const machine = PRINTERS.find((p) => p.id === printers[0] && s.printers[p.id]);
       if (!title) fail(400, 'Nazwij jakoś swoje zamówienie.');
       if (!(meta.quantity >= 1 && meta.quantity <= 10)) fail(400, 'Liczba sztuk musi być od 1 do 10.');
-      if (!chosen.length) fail(400, 'Wybierz dostępną drukarkę.');
-      if (!filaments.length || filaments.includes(undefined)) fail(400, 'Wybierz kolor z listy.');
-      if (filaments.length > Math.max(...chosen.map((p) => p.maxColors))) fail(400, 'Za dużo kolorów na tę drukarkę.');
+      if (!filaments.length || filaments.includes(undefined) || !machine) fail(400, 'Wybierz kolor z listy.');
+      if (printers.length > 1) fail(400, 'Te kolory są na różnych drukarkach. Wybierz kolory z jednej.');
+      if (filaments.length > machine.maxColors) fail(400, 'Za dużo kolorów na tę drukarkę.');
       if (filaments.length > 1 && !long(meta.colorPlan, 500)) fail(400, 'Napisz, co ma być w którym kolorze.');
       const link = meta.kind === 'link' ? cleanLink(meta.link) : '';
       if (meta.kind === 'link' && !link) fail(400, 'Wklej link do modelu.');
@@ -140,7 +141,7 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
       const hasFile = meta.kind === 'file';
       const order = {
         id: db.nextId++, userId: user.id, name: user.name, kind: meta.kind, title, link,
-        quantity: Math.floor(meta.quantity), printer: meta.printer,
+        quantity: Math.floor(meta.quantity), printer: machine.id,
         filaments: filaments.map((f) => ({ id: f.id, name: f.name, color: f.color, pricePerMinute: cleanRate(f.pricePerMinute) })),
         colorPlan: long(meta.colorPlan, 500), notes,
         fileName: hasFile ? clean(meta.fileName, 120) : '', fileSize: hasFile ? body.size : 0, hasFile,
@@ -205,7 +206,7 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
         order.printMinutes = m;
       }
       if (json.serviceFee !== undefined) order.serviceFee = Math.max(0, Math.round(Number(json.serviceFee || 0) * 100) / 100);
-      reprice(order);
+      reprice(order, s.minPrice);
       if (json.paid !== undefined) order.paid = !!json.paid;
       if (json.status === 'confirm' && order.price == null) fail(400, 'Najpierw wpisz czas druku (albo opłatę), żeby kupujący zobaczył cenę.');
       if (STATUSES.includes(json.status)) order.status = json.status;
@@ -229,12 +230,13 @@ export async function demoApi(path, { method = 'GET', headers = {}, json, body }
       if (!(json.maxFileMB >= 1 && json.maxFileMB <= 200)) fail(400, 'Limit pliku: od 1 do 200 MB.');
       db.settings = {
         designFeeFrom: Math.max(0, Number(json.designFeeFrom) || 0),
+        minPrice: Math.max(0, Number(json.minPrice) || 0),
         classCode: 'demo', // w wersji pokazowej kod i hasło są stałe
         maxActive: Math.floor(json.maxActive),
         maxFileMB: Math.floor(json.maxFileMB),
         printers: Object.fromEntries(PRINTERS.map((p) => [p.id, !!json.printers[p.id]])),
         filaments: json.filaments
-          .map((f, i) => ({ id: f.id || `d${Date.now()}${i}`, name: clean(f.name, 40), note: clean(f.note, 80), color: f.color, available: !!f.available, pricePerMinute: cleanRate(f.pricePerMinute) }))
+          .map((f, i) => ({ id: f.id || `d${Date.now()}${i}`, name: clean(f.name, 40), note: clean(f.note, 80), printer: f.printer === 'mini' ? 'mini' : 'mk4s', color: f.color, available: !!f.available, pricePerMinute: cleanRate(f.pricePerMinute) }))
           .filter((f) => f.name),
       };
       save(db);

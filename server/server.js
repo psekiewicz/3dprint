@@ -53,16 +53,17 @@ if (fs.existsSync(DB_FILE)) {
     nextUserId: 1,
     settings: {
       designFeeFrom: 10,
+      minPrice: 5,
       classCode: randomCode(6).toLowerCase(),
       adminPassword: hashPassword(password),
       maxActive: 2,
       maxFileMB: 50,
       printers: { mini: true, mk4s: true },
       filaments: [
-        { id: 'f1', name: 'PLA czarny', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#1d1d1f', available: true, pricePerMinute: 0.1 },
-        { id: 'f2', name: 'PLA biały', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#f4f4f4', available: true, pricePerMinute: 0.1 },
-        { id: 'f3', name: 'PLA pomarańczowy', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#fa6831', available: true, pricePerMinute: 0.1 },
-        { id: 'f4', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.12 },
+        { id: 'f1', printer: 'mk4s', name: 'PLA czarny', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#1d1d1f', available: true, pricePerMinute: 0.1 },
+        { id: 'f2', printer: 'mk4s', name: 'PLA biały', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#f4f4f4', available: true, pricePerMinute: 0.1 },
+        { id: 'f3', printer: 'mini', name: 'PLA pomarańczowy', note: 'zwykły plastik, pasuje do większości rzeczy', color: '#fa6831', available: true, pricePerMinute: 0.1 },
+        { id: 'f4', printer: 'mini', name: 'PETG przezroczysty', note: 'mocniejszy, znosi ciepło i wodę', color: '#cfe8f3', available: true, pricePerMinute: 0.12 },
       ],
     },
   };
@@ -78,6 +79,8 @@ db.users ||= [];
 db.nextUserId ||= 1;
 delete db.settings.shopName;
 db.settings.designFeeFrom ??= 10;
+db.settings.minPrice ??= 5;
+for (const f of db.settings.filaments) f.printer ||= 'mk4s'; // każdy filament leży przy jednej drukarce
 for (const o of db.orders) {
   o.filaments ||= o.filament ? [o.filament] : [];
   o.kind ||= 'file';
@@ -149,6 +152,7 @@ function publicConfig() {
   const s = db.settings;
   return {
     designFeeFrom: s.designFeeFrom,
+    minPrice: s.minPrice,
     printers: PRINTERS.map((p) => ({ ...p, enabled: !!s.printers[p.id] })),
     filaments: s.filaments,
     maxActive: s.maxActive,
@@ -168,7 +172,8 @@ const cleanRate = (value) => { const r = Math.round(Number(value) * 1000) / 1000
 const orderRate = (order) => Math.max(0, ...order.filaments.map((f) => f.pricePerMinute || 0));
 function reprice(order) {
   if (order.printMinutes == null && !order.serviceFee) { order.price = null; return; }
-  order.price = Math.round(((order.printMinutes || 0) * orderRate(order) + (order.serviceFee || 0)) * 100) / 100;
+  const price = Math.round(((order.printMinutes || 0) * orderRate(order) + (order.serviceFee || 0)) * 100) / 100;
+  order.price = Math.max(price, db.settings.minPrice || 0); // cena minimalna za zamówienie
 }
 function setPrintTime(order, minutes) {
   if (minutes === null || minutes === '') { order.printMinutes = null; return; }
@@ -280,20 +285,20 @@ function createOrder(req, res) {
   const title = text(meta.title, 80);
   const notes = longText(meta.notes, 1000);
   const quantity = Math.floor(Number(meta.quantity));
-  const printer = meta.printer || 'any';
   const ids = Array.isArray(meta.filaments) ? [...new Set(meta.filaments)] : [];
   const filaments = ids.map((id) => s.filaments.find((f) => f.id === id && f.available));
-  const enabled = PRINTERS.filter((p) => s.printers[p.id]);
-  const chosen = printer === 'any' ? enabled : enabled.filter((p) => p.id === printer);
+  // Filamenty leżą przy konkretnej drukarce, więc kolory wyznaczają drukarkę.
+  const printers = [...new Set(filaments.map((f) => f && f.printer))];
+  const machine = PRINTERS.find((p) => p.id === printers[0] && s.printers[p.id]);
+  const printer = machine && machine.id;
 
   if (!KINDS.includes(kind)) fail(400, 'Wybierz, co chcesz zamówić.');
   if (!title) fail(400, 'Nazwij jakoś swoje zamówienie.');
   if (!(quantity >= 1 && quantity <= 10)) fail(400, 'Liczba sztuk musi być od 1 do 10.');
-  if (!chosen.length) fail(400, 'Wybierz dostępną drukarkę.');
-  if (!filaments.length || filaments.includes(undefined)) fail(400, 'Wybierz kolor z listy.');
-  const maxColors = Math.max(...chosen.map((p) => p.maxColors));
-  if (filaments.length > maxColors) {
-    fail(400, maxColors > 1 ? `W jednym wydruku zmieści się najwyżej ${maxColors} kolorów.` : 'Ta drukarka drukuje tylko jednym kolorem naraz.');
+  if (!filaments.length || filaments.includes(undefined) || !machine) fail(400, 'Wybierz kolor z listy.');
+  if (printers.length > 1) fail(400, 'Te kolory są na różnych drukarkach. Wybierz kolory z jednej.');
+  if (filaments.length > machine.maxColors) {
+    fail(400, machine.maxColors > 1 ? `Najwyżej ${machine.maxColors} kolorów naraz.` : 'Ta drukarka drukuje jednym kolorem.');
   }
   const colorPlan = longText(meta.colorPlan, 500);
   if (filaments.length > 1 && !colorPlan) fail(400, 'Napisz, co ma być w którym kolorze.');
@@ -553,6 +558,8 @@ async function api(req, res, url) {
       const body = await readJson(req);
       const s = db.settings;
       const classCode = text(body.classCode, 40);
+      const minPrice = Math.round(Number(body.minPrice) * 100) / 100;
+      if (!(minPrice >= 0 && minPrice <= 1000)) fail(400, 'Cena minimalna: od 0 zł.');
       const designFeeFrom = Math.round(Number(body.designFeeFrom) * 100) / 100;
       if (!(designFeeFrom >= 0 && designFeeFrom <= 10000)) fail(400, 'Cena projektu: od 0 zł.');
       const maxActive = Math.floor(Number(body.maxActive));
@@ -565,12 +572,13 @@ async function api(req, res, url) {
         id: /^[\w-]{1,20}$/.test(f.id) ? f.id : 'f' + crypto.randomBytes(4).toString('hex'),
         name: text(f.name, 40),
         note: text(f.note, 80),
+        printer: PRINTERS.some((p) => p.id === f.printer) ? f.printer : 'mk4s',
         color: /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : '#888888',
         available: !!f.available,
         pricePerMinute: cleanRate(f.pricePerMinute),
       })).filter((f) => f.name);
       Object.assign(s, {
-        designFeeFrom, classCode, maxActive, maxFileMB, filaments,
+        designFeeFrom, minPrice, classCode, maxActive, maxFileMB, filaments,
         printers: Object.fromEntries(PRINTERS.map((p) => [p.id, !!(body.printers && body.printers[p.id])])),
       });
       saveNow();

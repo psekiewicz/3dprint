@@ -15,7 +15,7 @@ Zakłada konto (imię i nazwisko, e-mail, hasło, kod klasy) i zamawia na jeden 
 | Zaprojektujcie mi | opis rzeczy, której nie ma w internecie | wydruk + opłata za projekt |
 | Mam plik | STL lub 3MF, z podglądem 3D i sprawdzeniem, czy się zmieści | sam wydruk |
 
-Wybiera kolor (jeden albo do pięciu, wtedy pisze, co ma być w którym), liczbę sztuk i wysyła. Potem dostaje mailem cenę i **musi ją potwierdzić** na stronie, zanim cokolwiek zostanie wydrukowane.
+Wybiera kolor (na MK4S do pięciu naraz, wtedy pisze, co ma być w którym), liczbę sztuk i wysyła. Potem dostaje mailem cenę i **musi ją potwierdzić** na stronie, zanim cokolwiek zostanie wydrukowane.
 
 ## Co może sprzedawca (`/admin.html`)
 
@@ -30,9 +30,15 @@ W panelu ustawiasz też kod klasy, filamenty ze stawkami i opisami, dostępne dr
 
 ## Cena
 
-**Cena = stawka filamentu (zł/min) × czas druku (min) + opłata za usługę.**
+**Cena = stawka filamentu (zł/min) × czas druku (min) + opłata za usługę**, ale nie mniej niż cena minimalna (domyślnie 5 zł, ustawiana w panelu).
 
 Przy kilku kolorach liczy się najwyższa stawka z wybranych. Zamówienie zapamiętuje stawki z chwili złożenia, więc zmiana cennika nie rusza starych zamówień. Płatność odbywa się poza aplikacją (gotówka, BLIK).
+
+## Dwie drukarki, dwóch właścicieli
+
+Każdy filament jest przypisany do jednej drukarki (MINI+ albo MK4S) — ustawiasz to w panelu przy filamencie. Kupujący nie wybiera drukarki: wyznacza ją kolor. Kolory z różnych drukarek nie łączą się w jednym zamówieniu, a wiele kolorów naraz jest możliwe tylko na MK4S.
+
+W panelu przy każdym zamówieniu widać drukarkę, a lista i sumy „do zapłaty / zapłacono" dają się przefiltrować po drukarce, więc każdy z Was widzi swoje.
 
 ## E-maile
 

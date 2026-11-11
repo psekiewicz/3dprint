@@ -97,8 +97,7 @@
           <textarea id="notes" maxlength="1000"></textarea>
 
           <h3><span class="num">2</span>Kolor</h3>
-          <div class="choices" id="filaments"></div>
-          <p class="hint" id="color-hint"></p>
+          <div id="filaments"></div>
           <div id="color-plan-box" hidden>
             <label for="color-plan">Co w którym kolorze?</label>
             <textarea id="color-plan" maxlength="500" placeholder="np. smok czerwony, oczy białe, podstawka czarna"></textarea>
@@ -107,21 +106,13 @@
           <h3><span class="num">3</span>Sztuk</h3>
           <input type="number" id="quantity" min="1" max="10" value="1" required style="max-width:110px">
 
-          <details class="advanced">
-            <summary>Wybierz drukarkę</summary>
-            <div class="choices" id="printers"></div>
-          </details>
         </div>
 
         <aside>
           <div class="pricebox">
             <h3>Ile to kosztuje?</h3>
             <ul id="price-examples"></ul>
-            <p class="hint">Dokładną cenę potwierdzasz przed drukiem.</p>
-          </div>
-          <div class="pricebox plain">
-            <h3>Jak duże?</h3>
-            <p id="size-info"></p>
+            <p class="hint" id="price-hint"></p>
           </div>
         </aside>
       </div>

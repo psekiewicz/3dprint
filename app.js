@@ -128,10 +128,6 @@ async function start() {
   $('#who').textContent = user.name;
   const fee = formatPrice(config.designFeeFrom);
   $('#design-tag').textContent = `od ${fee}`;
-  const biggest = config.printers.filter((p) => p.enabled).sort((a, b) => b.volume[0] - a.volume[0])[0];
-  $('#size-info').textContent = biggest
-    ? `Do ${biggest.volume.map((v) => v / 10).join(' × ')} cm.`
-    : 'Drukarki mają przerwę.';
   renderKind();
   renderChoices();
 }
@@ -165,44 +161,46 @@ function renderKind() {
 }
 $('#kinds').addEventListener('change', renderKind);
 
+// Filamenty leżą przy konkretnej drukarce, więc wybrane kolory wyznaczają drukarkę.
+const printerById = (id) => config.printers.find((p) => p.id === id && p.enabled);
+function pickedPrinter() {
+  const first = config.filaments.find((f) => f.id === checked('filament')[0]);
+  return first ? printerById(first.printer) : null;
+}
+
 function renderChoices() {
   if (!config) return;
-  const enabled = config.printers.filter((p) => p.enabled);
-  const maxColors = Math.max(1, ...enabled.map((p) => p.maxColors));
   const dims = kind() === 'file' ? model?.dims : null;
+  const tooBig = (p) => fits(dims, p.volume) === 'no';
+  const available = config.filaments.filter((f) => f.available && printerById(f.printer));
+  // odznacz kolory z drukarki, w której wgrany model się nie zmieści
+  let picked = checked('filament').filter((id) => !tooBig(printerById(available.find((f) => f.id === id)?.printer) || { volume: [0, 0, 0] }));
+  const current = printerById(available.find((f) => f.id === picked[0])?.printer);
+  if (current) picked = picked.filter((id) => available.find((f) => f.id === id).printer === current.id); // tylko kolory z jednej drukarki
 
-  // kolory
-  const picked = checked('filament');
-  const available = config.filaments.filter((f) => f.available);
-  $('#filaments').replaceChildren(...(available.length
-    ? available.map((f) => chip('checkbox', 'filament', f.id,
-      [swatch(f.color), h('span', {}, h('b', {}, f.name), f.note && h('small', {}, f.note))],
-      { isChecked: picked.includes(f.id), disabled: !picked.includes(f.id) && picked.length >= maxColors }))
-    : [h('span', { class: 'hint' }, 'Brak filamentu.')]));
+  const groups = config.printers.filter((p) => p.enabled && available.some((f) => f.printer === p.id));
+  $('#filaments').replaceChildren(...(groups.length ? groups.map((p) => {
+    const blocked = tooBig(p) || (current && current.id !== p.id);
+    const info = [`do ${p.volume.map((v) => v / 10).join(' × ')} cm`, p.maxColors > 1 ? `do ${p.maxColors} kolorów naraz` : '1 kolor'];
+    return h('div', { class: `filament-group ${blocked ? 'blocked' : ''}` },
+      h('div', { class: 'group-label' }, tooBig(p) ? 'model się nie zmieści' : info.join(' · ')),
+      h('div', { class: 'choices' }, ...available.filter((f) => f.printer === p.id).map((f) => chip('checkbox', 'filament', f.id,
+        [swatch(f.color), h('span', {}, h('b', {}, f.name), f.note && h('small', {}, f.note))],
+        { isChecked: picked.includes(f.id), disabled: !picked.includes(f.id) && (blocked || picked.length >= p.maxColors) }))));
+  }) : [h('span', { class: 'hint' }, 'Brak filamentu.')]));
   $('#filaments').onchange = renderChoices;
-  $('#color-hint').textContent = maxColors > 1
-    ? `Do ${maxColors} kolorów. Więcej kolorów, dłuższy druk.`
-    : '';
   $('#color-plan-box').hidden = picked.length < 2;
   $('#color-plan').required = picked.length > 1;
-
-  // drukarka (ukryta w „Znam się")
-  const selected = checked('printer')[0] ?? 'any';
-  const ok = (p) => fits(dims, p.volume) !== 'no' && p.maxColors >= Math.max(1, picked.length);
-  const options = [
-    { id: 'any', name: 'Dowolna', ok: enabled.some(ok) },
-    ...enabled.map((p) => ({ id: p.id, name: `${p.name} (do ${p.volume.map((v) => v / 10).join(' × ')} cm${p.maxColors > 1 ? `, do ${p.maxColors} kolorów` : ''})`, ok: ok(p) })),
-  ];
-  const pick = options.find((o) => o.id === selected && o.ok) || options.find((o) => o.ok);
-  $('#printers').replaceChildren(...options.map((o) => chip('radio', 'printer', o.id, o.name, { isChecked: o === pick, disabled: !o.ok })));
-  $('#printers').onchange = updateBed;
 
   // przykładowe ceny
   const rates = (picked.length ? available.filter((f) => picked.includes(f.id)) : available).map((f) => f.pricePerMinute || 0);
   const rate = picked.length ? Math.max(0, ...rates) : Math.min(...(rates.length ? rates : [0]));
   $('#price-examples').replaceChildren(...[
     ['brelok', 30], ['figurka', 180], ['coś dużego', 480],
-  ].map(([what, minutes]) => h('li', {}, h('span', {}, `${what} (${minutes < 60 ? `${minutes} min` : `${minutes / 60} h`})`), h('b', {}, `~${formatPrice(minutes * rate)}`))));
+  ].map(([what, minutes]) => h('li', {},
+    h('span', {}, `${what} (${minutes < 60 ? `${minutes} min` : `${minutes / 60} h`})`),
+    h('b', {}, `~${formatPrice(Math.max(config.minPrice || 0, minutes * rate))}`))));
+  $('#price-hint').textContent = `${config.minPrice ? `Minimum ${formatPrice(config.minPrice)}. ` : ''}Cenę potwierdzasz przed drukiem.`;
 
   const mine = orders.filter((o) => isMine(o) && isActive(o)).length;
   $('#limit-info').textContent = mine >= config.maxActive
@@ -213,10 +211,8 @@ function renderChoices() {
 }
 
 function bedVolume() {
-  const id = checked('printer')[0];
-  const enabled = config.printers.filter((p) => p.enabled);
-  const printer = enabled.find((p) => p.id === id)
-    || enabled.find((p) => fits(model?.dims, p.volume) !== 'no'); // „Wszystko jedno": pierwsza, w której się mieści
+  const printer = pickedPrinter()
+    || config.printers.find((p) => p.enabled && fits(model?.dims, p.volume) !== 'no'); // bez koloru: pierwsza, w której się mieści
   return printer ? printer.volume : null;
 }
 function updateBed() {
@@ -298,22 +294,15 @@ $('#order-form').addEventListener('submit', async (event) => {
   error.textContent = success.textContent = '';
   const current = kind();
   const filaments = checked('filament');
-  const printer = checked('printer')[0];
   if (current === 'file' && !model) { error.textContent = 'Wybierz plik z modelem.'; return; }
   if (!filaments.length) { error.textContent = 'Wybierz kolor.'; return; }
-  if (!printer) {
-    error.textContent = current === 'file' && model?.dims
-      ? 'Model jest za duży na nasze drukarki.'
-      : 'Za dużo kolorów.';
-    return;
-  }
 
   const meta = {
     kind: current,
     title: $('#title').value,
     link: $('#link').value.trim(),
     quantity: Number($('#quantity').value),
-    printer, filaments,
+    filaments,
     colorPlan: filaments.length > 1 ? $('#color-plan').value : '',
     notes: $('#notes').value,
     fileName: current === 'file' ? model.file.name : '',

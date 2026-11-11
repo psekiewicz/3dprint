@@ -26,6 +26,8 @@ let token = sessionStorage.getItem('adminToken');
 let orders = [];
 let users = [];
 let sellers = [];
+let minPrice = 0;
+let printerFilter = 'all';
 let me = null;
 let filter = 'new';
 
@@ -92,27 +94,28 @@ function renderOrders() {
     h('button', {
       type: 'button', class: `small ${key === filter ? 'active' : ''}`,
       onclick: () => { filter = key; renderOrders(); },
-    }, `${label} (${orders.filter(test).length})`)));
+    }, `${label} (${orders.filter(test).filter((o) => printerFilter === 'all' || o.printer === printerFilter).length})`)),
+  h('select', { class: 'printer-filter', title: 'Drukarka', onchange: (e) => { printerFilter = e.target.value; renderOrders(); } },
+    h('option', { value: 'all', selected: printerFilter === 'all' }, 'obie drukarki'),
+    ...PRINTERS.map((p) => h('option', { value: p.id, selected: printerFilter === p.id }, p.name.replace('Prusa ', '')))));
 
-  const live = orders.filter((o) => o.price != null && !['rejected', 'cancelled'].includes(o.status));
+  const live = orders.filter((o) => o.price != null && !['rejected', 'cancelled'].includes(o.status) && (printerFilter === 'all' || o.printer === printerFilter));
   const sum = (list) => formatPrice(list.reduce((total, o) => total + o.price, 0));
   $('#totals').textContent = `Do zapłaty: ${sum(live.filter((o) => !o.paid))} · Zapłacono: ${sum(live.filter((o) => o.paid))}`;
 
-  const visible = orders.filter(FILTERS[filter][1]);
+  const onPrinter = (o) => printerFilter === 'all' || o.printer === printerFilter;
+  const visible = orders.filter(FILTERS[filter][1]).filter(onPrinter);
   visible.sort((a, b) => (['closed', 'all'].includes(filter) ? b.id - a.id : a.id - b.id));
   $('#orders').replaceChildren(...(visible.length ? visible.map(orderCard) : [h('div', { class: 'empty' }, 'Brak zamówień.')]));
 }
 
 function orderCard(o) {
   const buyer = users.find((u) => u.id === o.userId);
-  const wanted = PRINTERS.find((p) => p.id === o.printer)?.name || 'wszystko jedno';
+  const machine = PRINTERS.find((p) => p.id === o.printer)?.name || 'drukarka nieustalona';
   const fitInfo = o.dims
     ? PRINTERS.map((p) => `${p.name}: ${{ yes: 'tak', rotated: 'po obróceniu', no: 'nie' }[fits(o.dims, p.volume)]}`).join(', ')
     : '';
   const status = h('select', {}, ...Object.entries(STATUS).map(([value, label]) => h('option', { value, selected: value === o.status }, label)));
-  const printer = h('select', {},
-    h('option', { value: '' }, 'nie przypisano'),
-    ...PRINTERS.map((p) => h('option', { value: p.id, selected: p.id === o.assignedPrinter }, p.name)));
   const minutes = h('input', { type: 'number', min: 1, step: 1, value: o.printMinutes ?? '', placeholder: 'z PrusaSlicer' });
   const fee = h('input', { type: 'number', min: 0, step: 0.5, value: o.serviceFee || '', placeholder: '0' });
   const link = h('input', { type: 'url', maxLength: 500, value: o.link || '', placeholder: 'https://… (np. model, który znaleźliśmy)' });
@@ -126,7 +129,8 @@ function orderCard(o) {
     const f = Number(fee.value) || 0;
     const parts = [`${formatRate(rate)} × ${m} min`];
     if (f) parts.push(`usługa ${formatPrice(f)}`);
-    price.textContent = m || f ? `${parts.join(' + ')} = ${formatPrice(Math.round((m * rate + f) * 100) / 100)}` : `Stawka: ${formatRate(rate)}. Wpisz czas druku.`;
+    const sum = Math.round((m * rate + f) * 100) / 100;
+    price.textContent = m || f ? `${parts.join(' + ')} = ${formatPrice(Math.max(sum, minPrice))}${sum < minPrice ? ' (minimum)' : ''}` : `Stawka: ${formatRate(rate)}. Wpisz czas druku.`;
   };
   minutes.addEventListener('input', showPrice);
   fee.addEventListener('input', showPrice);
@@ -138,7 +142,7 @@ function orderCard(o) {
       const result = await adminApi(`/api/admin/orders/${o.id}`, {
         method: 'PATCH',
         json: {
-          status: status.value, assignedPrinter: printer.value || null, teacherNote: note.value, link: link.value,
+          status: status.value, teacherNote: note.value, link: link.value,
           printMinutes: minutes.value === '' ? null : Number(minutes.value), serviceFee: Number(fee.value) || 0, paid: paid.checked,
         },
       });
@@ -153,9 +157,10 @@ function orderCard(o) {
   const quick = (label, next) => h('button', { type: 'button', class: 'small primary', onclick: () => save(next) }, label);
 
   return h('div', { class: 'order' },
-    h('div', { class: 'order-head' }, h('span', { class: 'num' }, orderNumber(o)), h('span', { class: 'title' }, o.title), statusBadge(o.status)),
+    h('div', { class: 'order-head' }, h('span', { class: 'num' }, orderNumber(o)), h('span', { class: 'title' }, o.title),
+      h('span', { class: 'tag' }, machine), statusBadge(o.status)),
     h('div', { class: 'order-meta' }, `${o.name}`, buyer?.email && [' · ', h('a', { href: `mailto:${buyer.email}` }, buyer.email)],
-      ` · ${formatDate(o.createdAt)} · ${KIND[o.kind] || ''} · ${o.quantity} szt. · drukarka: ${wanted}`),
+      ` · ${formatDate(o.createdAt)} · ${KIND[o.kind] || ''} · ${o.quantity} szt.`),
     h('div', { class: 'order-meta' }, 'Kolory: ', colors(o), o.colorPlan && ` · ${o.colorPlan}`),
     o.link && h('div', { class: 'order-meta' }, 'Model: ', h('a', { href: o.link, target: '_blank', rel: 'noopener' }, o.link)),
     o.hasFile && h('div', { class: 'order-meta' },
@@ -164,7 +169,6 @@ function orderCard(o) {
     o.handledBy && h('div', { class: 'order-meta' }, `Ostatnio ruszał(a): ${o.handledBy}${o.printMinutes ? ` · druk ${formatMinutes(o.printMinutes)}` : ''}`),
     h('div', { class: 'admin-row' },
       h('div', {}, h('label', {}, 'Status'), status),
-      h('div', {}, h('label', {}, 'Drukarka'), printer),
       h('div', {}, h('label', {}, 'Czas druku (min)'), minutes),
       h('div', {}, h('label', {}, 'Opłata za usługę (zł)'), fee),
       h('div', { class: 'wide' }, h('label', {}, 'Link do modelu'), link),
@@ -291,10 +295,11 @@ $('#seller-form').addEventListener('submit', async (event) => {
 });
 
 // ---------- ustawienia ----------
-function filamentRow(f = { id: '', name: '', note: '', color: '#fa6831', available: true, pricePerMinute: 0.1 }) {
+function filamentRow(f = { id: '', printer: 'mk4s', name: '', note: '', color: '#fa6831', available: true, pricePerMinute: 0.1 }) {
   const row = h('div', { class: 'filament-row' },
     h('input', { type: 'color', value: f.color, title: 'Kolor' }),
     h('input', { type: 'text', class: 'name', value: f.name, maxLength: 40, placeholder: 'np. PLA czerwony', required: true }),
+    h('select', { class: 'printer', title: 'Przy której drukarce leży ten filament' }, ...PRINTERS.map((p) => h('option', { value: p.id, selected: p.id === f.printer }, p.name.replace('Prusa ', '')))),
     h('input', { type: 'number', class: 'rate', min: 0, max: 100, step: 0.001, value: f.pricePerMinute ?? 0, title: 'Stawka w zł za minutę druku', required: true }),
     h('span', { class: 'hint' }, 'zł/min'),
     h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: f.available }), 'jest'),
@@ -306,6 +311,7 @@ function filamentRow(f = { id: '', name: '', note: '', color: '#fa6831', availab
 
 function fillSettings(s) {
   $('#design-fee').value = s.designFeeFrom;
+  $('#min-price').value = minPrice = s.minPrice;
   $('#class-code').value = s.classCode;
   $('#max-active').value = s.maxActive;
   $('#max-file').value = s.maxFileMB;
@@ -324,6 +330,7 @@ $('#settings-form').addEventListener('submit', async (event) => {
   $('#settings-error').textContent = $('#settings-success').textContent = '';
   const body = {
     designFeeFrom: Number($('#design-fee').value),
+    minPrice: Number($('#min-price').value),
     classCode: $('#class-code').value,
     maxActive: Number($('#max-active').value),
     maxFileMB: Number($('#max-file').value),
@@ -333,6 +340,7 @@ $('#settings-form').addEventListener('submit', async (event) => {
       color: row.querySelector('input[type=color]').value,
       name: row.querySelector('input.name').value,
       note: row.querySelector('input.note').value,
+      printer: row.querySelector('select.printer').value,
       pricePerMinute: Number(row.querySelector('input.rate').value),
       available: row.querySelector('input[type=checkbox]').checked,
     })),
