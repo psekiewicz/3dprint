@@ -57,7 +57,7 @@ docker compose up -d --build
 docker compose logs druk3d    # hasło sprzedawcy i kod klasy z pierwszego uruchomienia
 ```
 
-Aplikacja słucha wtedy na `127.0.0.1:3000` tego serwera. Do internetu wystawia ją reverse proxy z HTTPS (nginx, Caddy, Traefik…), przekierowując subdomenę na ten port. Dane leżą w wolumenie `druk3d-data` i przetrwają aktualizację: `git pull && docker compose up -d --build`.
+Aplikacja słucha wtedy na `127.0.0.1:3000` tego serwera. Do internetu wystawia ją reverse proxy z HTTPS, przekierowując subdomenę na ten port — gotowa konfiguracja dla nginx jest w `deploy/nginx-druk3d.conf`. Dane leżą w wolumenie `druk3d-data` i przetrwają aktualizację: `git pull && docker compose up -d --build`.
 
 ### Ustawienia serwera (zmienne środowiskowe)
 
