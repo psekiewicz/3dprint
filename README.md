@@ -46,13 +46,15 @@ Maile wychodzą z Twojej skrzynki przez SMTP. Potrzebne zmienne (wzór w `.env.e
 
 | Zmienna | Przykład | Opis |
 |---|---|---|
-| `SMTP_HOST` | `ssl0.ovh.net` | serwer poczty wychodzącej (sprawdź w panelu dostawcy) |
+| `SMTP_HOST` | `smtp.mail.ovh.net` | serwer poczty wychodzącej (OVH: ten albo `ssl0.ovh.net`) |
 | `SMTP_PORT` | `465` | 465 (SSL) albo 587 (STARTTLS) |
 | `SMTP_USER` | `contact@pixelinventor.com` | login do skrzynki |
 | `SMTP_PASS` | | hasło do skrzynki |
 | `MAIL_FROM` | `Druk 3D <contact@pixelinventor.com>` | nadawca widoczny w mailu |
 | `MAIL_REPLY_TO` | | opcjonalnie: dokąd idą odpowiedzi |
 | `PUBLIC_URL` | `https://druk.pixelinventor.com` | adres strony do linku w mailu |
+
+Skrzynkę zakładasz w panelu OVH: **Web Cloud → E-maile → (domena) → Konta e-mail → Utwórz konto**. Login SMTP to pełny adres, hasło to hasło tej skrzynki.
 
 Bez tych ustawień wszystko działa, tylko maile nie wychodzą, a panel pokazuje o tym ostrzeżenie. Hasło do skrzynki trzymaj w pliku `.env` na serwerze, nigdy w repozytorium.
 

@@ -34,20 +34,26 @@
   </main>
 
   <main id="app" hidden>
-    <section class="card">
-      <h2>Zamówienia</h2>
-      <div class="notice" id="mail-off" hidden>E-maile wyłączone: brak ustawień SMTP (patrz README).</div>
+    <nav class="views" id="views">
+      <button type="button" data-view="orders">Zamówienia</button>
+      <button type="button" data-view="accounts">Konta</button>
+      <button type="button" data-view="settings">Ustawienia</button>
+    </nav>
+    <div class="notice" id="mail-off" hidden>E-maile wyłączone: brak ustawień SMTP (patrz README).</div>
+
+    <section class="card" data-view="orders">
+      <div class="board" id="board"></div>
       <div class="tabs" id="tabs"></div>
       <p class="hint" id="totals"></p>
       <div class="orders" id="orders"></div>
     </section>
 
-    <section class="card">
-      <h2>Konta kupujących</h2>
+    <section class="card" data-view="accounts">
+      <h2>Kupujący</h2>
       <div class="orders" id="users"></div>
     </section>
 
-    <section class="card">
+    <section class="card" data-view="accounts">
       <h2>Sprzedawcy</h2>
       <div class="orders" id="sellers"></div>
       <form class="admin-row" id="seller-form">
@@ -57,7 +63,7 @@
       </form>
     </section>
 
-    <form class="card" id="settings-form">
+    <form class="card" id="settings-form" data-view="settings">
       <h2>Ustawienia</h2>
       <div class="grid2">
         <div>

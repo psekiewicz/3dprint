@@ -1,6 +1,6 @@
 import {
   API, api, h, $, formatDate, DEMO_CODE, isDemo, setDemo, showDemoBanner, STATUS, KIND, fits, colors, orderRate, orderNumber,
-  formatRate, formatPrice, formatMinutes, statusBadge, formatDims, formatSize,
+  formatRate, formatPrice, statusBadge, formatDims, formatSize, priceText,
 } from './common.js';
 
 const PRINTERS = [
@@ -27,6 +27,7 @@ let orders = [];
 let users = [];
 let sellers = [];
 let minPrice = 0;
+const expanded = new Set(); // rozwinięte karty zamówień
 let printerFilter = 'all';
 let me = null;
 let filter = 'new';
@@ -83,6 +84,7 @@ async function start() {
   $('#app').hidden = false;
   $('#logout').hidden = false;
   $('#who').textContent = sellers.find((x) => x.id === me)?.name || '';
+  showView(location.hash.slice(1));
   renderOrders();
   renderUsers();
   renderSellers();
@@ -90,7 +92,8 @@ async function start() {
 
 // ---------- zamówienia ----------
 function renderOrders() {
-  $('#tabs').replaceChildren(...Object.entries(FILTERS).map(([key, [label, test]]) =>
+  // cztery główne etapy są na tablicy wyżej; tu tylko pozostałe widoki
+  $('#tabs').replaceChildren(...Object.entries(FILTERS).filter(([key]) => ['confirm', 'closed', 'all'].includes(key)).map(([key, [label, test]]) =>
     h('button', {
       type: 'button', class: `small ${key === filter ? 'active' : ''}`,
       onclick: () => { filter = key; renderOrders(); },
@@ -99,6 +102,10 @@ function renderOrders() {
     h('option', { value: 'all', selected: printerFilter === 'all' }, 'obie drukarki'),
     ...PRINTERS.map((p) => h('option', { value: p.id, selected: printerFilter === p.id }, p.name.replace('Prusa ', '')))));
 
+  const mineOnly = (o) => printerFilter === 'all' || o.printer === printerFilter;
+  $('#board').replaceChildren(...[['new', 'do wyceny'], ['accepted', 'do druku'], ['printing', 'w druku'], ['done', 'do odbioru']].map(([key, label]) =>
+    h('button', { type: 'button', class: `stat ${key === filter ? 'active' : ''}`, onclick: () => { filter = key; renderOrders(); } },
+      h('b', {}, String(orders.filter(FILTERS[key][1]).filter(mineOnly).length)), label)));
   const live = orders.filter((o) => o.price != null && !['rejected', 'cancelled'].includes(o.status) && (printerFilter === 'all' || o.printer === printerFilter));
   const sum = (list) => formatPrice(list.reduce((total, o) => total + o.price, 0));
   $('#totals').textContent = `Do zapłaty: ${sum(live.filter((o) => !o.paid))} · Zapłacono: ${sum(live.filter((o) => o.paid))}`;
@@ -156,34 +163,50 @@ function orderCard(o) {
   };
   const quick = (label, next) => h('button', { type: 'button', class: 'small primary', onclick: () => save(next) }, label);
 
-  return h('div', { class: 'order' },
+  const open = expanded.has(o.id) || o.status === 'new'; // „Do wyceny" od razu pokazuje pola
+  const toggle = () => { expanded.has(o.id) ? expanded.delete(o.id) : expanded.add(o.id); renderOrders(); };
+  const next = { new: ['Wyślij do potwierdzenia', 'confirm'], accepted: ['Drukuj', 'printing'], printing: ['Gotowe', 'done'], done: ['Odebrane', 'collected'] }[o.status];
+
+  return h('div', { class: `order ${open ? 'open' : ''}` },
     h('div', { class: 'order-head' }, h('span', { class: 'num' }, orderNumber(o)), h('span', { class: 'title' }, o.title),
       h('span', { class: 'tag' }, machine), statusBadge(o.status)),
-    h('div', { class: 'order-meta' }, `${o.name}`, buyer?.email && [' · ', h('a', { href: `mailto:${buyer.email}` }, buyer.email)],
-      ` · ${formatDate(o.createdAt)} · ${KIND[o.kind] || ''} · ${o.quantity} szt.`),
-    h('div', { class: 'order-meta' }, 'Kolory: ', colors(o), o.colorPlan && ` · ${o.colorPlan}`),
-    o.link && h('div', { class: 'order-meta' }, 'Model: ', h('a', { href: o.link, target: '_blank', rel: 'noopener' }, o.link)),
-    o.hasFile && h('div', { class: 'order-meta' },
-      `Plik: ${o.fileName} (${formatSize(o.fileSize)}) · ${formatDims(o.dims)}${fitInfo ? ` · mieści się: ${fitInfo}` : ''}`),
-    o.notes && h('div', { class: 'order-note' }, h('b', {}, 'Kupujący pisze: '), o.notes),
-    o.handledBy && h('div', { class: 'order-meta' }, `Ostatnio ruszał(a): ${o.handledBy}${o.printMinutes ? ` · druk ${formatMinutes(o.printMinutes)}` : ''}`),
-    h('div', { class: 'admin-row' },
-      h('div', {}, h('label', {}, 'Status'), status),
-      h('div', {}, h('label', {}, 'Czas druku (min)'), minutes),
-      h('div', {}, h('label', {}, 'Opłata za usługę (zł)'), fee),
-      h('div', { class: 'wide' }, h('label', {}, 'Link do modelu'), link),
-      h('div', { class: 'wide' }, h('label', {}, 'Wiadomość dla kupującego'), note)),
-    h('div', { class: 'actions' }, price, h('label', { class: 'check' }, paid, 'zapłacone')),
+    h('div', { class: 'order-meta' }, `${o.name} · ${formatDate(o.createdAt)} · ${KIND[o.kind] || ''} · ${o.quantity} szt. · `, colors(o)),
+    o.link && h('div', { class: 'order-meta' }, h('a', { href: o.link, target: '_blank', rel: 'noopener' }, o.link)),
+    o.notes && h('div', { class: 'order-note' }, o.notes),
+    o.colorPlan && h('div', { class: 'order-note' }, h('b', {}, 'Kolory: '), o.colorPlan),
+    !open && o.price != null && h('div', { class: 'order-price' }, priceText(o), ' ',
+      h('span', { class: `badge ${o.paid ? 'badge-done' : 'badge-new'}` }, o.paid ? 'zapłacone' : 'do zapłaty')),
+    open && h('div', { class: 'edit' },
+      h('div', { class: 'order-meta' }, buyer?.email && [h('a', { href: `mailto:${buyer.email}` }, buyer.email), ' · '],
+        o.hasFile && `${o.fileName} (${formatSize(o.fileSize)}) · ${formatDims(o.dims)}${fitInfo ? ` · mieści się: ${fitInfo}` : ''} · `,
+        o.handledBy && `ostatnio: ${o.handledBy}`),
+      h('div', { class: 'admin-row' },
+        h('div', {}, h('label', {}, 'Czas druku (min)'), minutes),
+        h('div', {}, h('label', {}, 'Opłata za usługę (zł)'), fee),
+        h('div', { class: 'wide' }, h('label', {}, 'Status'), status),
+        h('div', { class: 'wide' }, h('label', {}, 'Link do modelu'), link),
+        h('div', { class: 'wide' }, h('label', {}, 'Wiadomość dla kupującego'), note)),
+      h('div', { class: 'actions' }, price, h('label', { class: 'check' }, paid, 'zapłacone'))),
     h('div', { class: 'actions' },
-      o.status === 'new' && quick('Wyślij do potwierdzenia', 'confirm'),
-      o.status === 'accepted' && quick('Drukuj', 'printing'),
-      o.status === 'printing' && quick('Gotowe', 'done'),
-      o.status === 'done' && quick('Odebrane', 'collected'),
-      h('button', { type: 'button', class: 'small', onclick: () => save() }, 'Zapisz'),
-      o.hasFile && h('button', { type: 'button', class: 'small', onclick: () => download(o, message) }, 'Pobierz plik'),
-      h('button', { type: 'button', class: 'small danger', onclick: () => remove(o, message) }, 'Usuń'),
+      next && quick(next[0], next[1]),
+      !open && o.price != null && !o.paid && h('button', { type: 'button', class: 'small', onclick: () => { paid.checked = true; save(); } }, 'Zapłacone'),
+      open && h('button', { type: 'button', class: 'small', onclick: () => save() }, 'Zapisz'),
+      o.hasFile && h('button', { type: 'button', class: 'small', onclick: () => download(o, message) }, 'Plik'),
+      open && h('button', { type: 'button', class: 'small danger', onclick: () => remove(o, message) }, 'Usuń'),
+      o.status !== 'new' && h('button', { type: 'button', class: 'small ghost', onclick: toggle }, open ? 'Zwiń' : 'Edytuj'),
       message));
 }
+
+// ---------- widoki: Zamówienia / Konta / Ustawienia ----------
+function showView(view) {
+  if (!['orders', 'accounts', 'settings'].includes(view)) view = 'orders';
+  for (const el of document.querySelectorAll('#app [data-view]')) {
+    if (el.tagName === 'BUTTON') el.classList.toggle('active', el.dataset.view === view);
+    else el.hidden = el.dataset.view !== view;
+  }
+  history.replaceState(null, '', `#${view}`);
+}
+$('#views').addEventListener('click', (e) => { if (e.target.dataset.view) showView(e.target.dataset.view); });
 
 function flash(text) {
   $('#totals').textContent = text;

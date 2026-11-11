@@ -262,6 +262,18 @@ aside { display: grid; gap: 18px; }
 .empty { color: var(--muted); text-align: center; padding: 26px 10px; border: 2px dashed var(--muted); border-radius: var(--r); }
 
 /* ---------- panel sprzedawcy ---------- */
+.views { display: flex; gap: 10px; flex-wrap: wrap; }
+.views button.active { background: var(--yellow); color: var(--on-color); border-color: var(--on-color); box-shadow: 3px 3px 0 var(--on-color); }
+.board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+@media (max-width: 560px) { .board { grid-template-columns: 1fr 1fr; } }
+.stat { text-align: left; font-weight: 600; font-size: 0.86rem; color: var(--muted); padding: 10px 12px; }
+.stat b { display: block; font: 800 2rem/1 'Bricolage Grotesque', sans-serif; color: var(--ink); }
+.stat.active { background: var(--yellow); color: var(--on-color); border-color: var(--on-color); box-shadow: 3px 3px 0 var(--on-color); }
+.stat.active b { color: var(--on-color); }
+.order .edit { margin-top: 12px; padding-top: 12px; border-top: 2px dashed var(--ink); }
+.order.open { box-shadow: var(--shadow); }
+.order-head .tag { align-self: center; }
+
 .admin-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .admin-row .wide { grid-column: span 2; }
 @media (max-width: 800px) { .admin-row { grid-template-columns: 1fr 1fr; } }
