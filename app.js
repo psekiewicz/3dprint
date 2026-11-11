@@ -1,6 +1,6 @@
 import {
   api, h, $, setDemo, showDemoBanner, fits, swatch, statusBadge, colors, priceText, orderNumber,
-  formatPrice, formatDate, formatDims, formatSize, ACTIVE, KIND,
+  formatPrice, formatDate, formatDims, formatSize, ACTIVE, KIND, emailError, suggestEmail,
 } from './common.js';
 
 const store = {
@@ -48,6 +48,30 @@ function setRegistering(on) {
 }
 $('#toggle-register').addEventListener('click', () => setRegistering(!registering));
 
+// „Czy chodziło Ci o jan@gmail.com?" — podpowiedź przy literówce w domenie.
+let keptEmail = ''; // adres, przy którym ktoś świadomie odrzucił podpowiedź
+function checkEmail() {
+  const input = $('#login-email');
+  const box = $('#email-suggest');
+  const email = input.value.trim();
+  const fixed = email && email !== keptEmail ? suggestEmail(email) : null;
+  box.hidden = !fixed;
+  if (!fixed) return false;
+  box.replaceChildren(
+    h('div', {}, 'Czy chodziło Ci o ', h('b', {}, fixed), '?'),
+    h('button', { type: 'button', class: 'small', onclick: () => { input.value = fixed; checkEmail(); } }, 'Tak, popraw'),
+    h('button', { type: 'button', class: 'small', onclick: () => { keptEmail = email; checkEmail(); } }, 'Nie, jest dobrze'));
+  return true;
+}
+// Pokazujemy ją chwilę po przerwaniu pisania, a nie przy wyjściu z pola:
+// inaczej wyskakiwałaby w momencie kliknięcia „Załóż konto" i przesuwała przycisk spod palca.
+let emailTimer;
+$('#login-email').addEventListener('input', () => {
+  $('#email-suggest').hidden = true;
+  clearTimeout(emailTimer);
+  emailTimer = setTimeout(checkEmail, 800);
+});
+
 async function signIn(path, body, headers = {}) {
   const result = await api(path, { method: 'POST', json: body, headers });
   user = { ...result.user, token: result.token };
@@ -59,8 +83,13 @@ $('#login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const body = { name: $('#login-name').value.trim().replace(/\s+/g, ' '), password: $('#login-password').value };
   setDemo(false);
+  clearTimeout(emailTimer);
+  $('#login-error').textContent = '';
   try {
     if (registering) {
+      if (checkEmail()) { $('#login-error').textContent = 'Zerknij na adres e-mail wyżej.'; return; }
+      const problem = emailError($('#login-email').value.trim());
+      if (problem) { $('#login-error').textContent = problem; return; }
       await signIn('/api/register', { ...body, email: $('#login-email').value.trim() },
         { 'X-Class-Code': encodeURIComponent($('#login-code').value.trim()) });
     } else {

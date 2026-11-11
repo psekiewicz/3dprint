@@ -89,6 +89,9 @@ h3 .num {
 a.pending { display: block; background: var(--accent); color: var(--on-color); border: 2px solid var(--on-color); border-radius: var(--r); box-shadow: 4px 4px 0 var(--on-color); padding: 12px 16px; font-weight: 800; text-decoration: none; }
 a.pending:hover { color: var(--on-color); }
 
+.suggest { margin-top: 8px; padding: 8px 10px; background: var(--yellow); color: var(--on-color); border: 2px solid var(--on-color); border-radius: var(--r); font-weight: 600; font-size: 0.92rem; overflow-wrap: anywhere; }
+.suggest button { margin: 6px 6px 0 0; }
+
 /* ---------- jak to działa ---------- */
 .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; counter-reset: step; }
 .steps li { counter-increment: step; position: relative; padding: 4px 0 0 46px; font-size: 0.93rem; color: var(--muted); }

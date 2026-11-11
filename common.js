@@ -95,6 +95,46 @@ export function fits(dims, volume) {
   return rotations.some(ok) ? 'rotated' : 'no';
 }
 
+// ---------- e-mail: sprawdzenie i podpowiedź przy literówce w domenie ----------
+const MAIL_DOMAINS = [
+  'gmail.com', 'wp.pl', 'onet.pl', 'op.pl', 'vp.pl', 'o2.pl', 'interia.pl', 'interia.eu', 'poczta.onet.pl', 'gazeta.pl', 'tlen.pl',
+  'outlook.com', 'hotmail.com', 'live.com', 'icloud.com', 'yahoo.com', 'proton.me', 'mail.com', 'email.com',
+];
+function distance(a, b) {
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+// Musi być @, coś przed nią i kropka w domenie.
+export function emailError(email) {
+  const at = email.lastIndexOf('@');
+  if (/\s/.test(email)) return 'W adresie e-mail nie może być spacji.';
+  if (at < 1) return 'W adresie brakuje @ (np. jan@gmail.com).';
+  const domain = email.slice(at + 1);
+  if (!/^[^.@]+(\.[^.@]+)+$/.test(domain)) return `Po @ musi być pełna domena z kropką, np. ${email.slice(0, at)}@gmail.com.`;
+  return '';
+}
+// Zwraca poprawiony adres, gdy domena wygląda na literówkę znanej (gmial.com, gmail.con, samo „gmail"), inaczej null.
+export function suggestEmail(email) {
+  const at = email.lastIndexOf('@');
+  if (at < 1) return null;
+  const domain = email.slice(at + 1).toLowerCase().replace(/,/g, '.').replace(/\.+$/, '');
+  if (!domain || MAIL_DOMAINS.includes(domain) && domain === email.slice(at + 1)) return null;
+  let best = MAIL_DOMAINS.find((d) => d === domain) // ta sama domena, tylko z przecinkiem albo wielkimi literami
+    || MAIL_DOMAINS.find((d) => d.split('.')[0] === domain); // sama nazwa bez końcówki: „gmail"
+  if (!best) {
+    const limit = domain.length <= 6 ? 1 : 2;
+    const ranked = MAIL_DOMAINS.map((d) => [distance(domain, d), d]).sort((a, b) => a[0] - b[0]);
+    if (ranked[0][0] <= limit && ranked[0][0] < ranked[1][0]) best = ranked[0][1];
+  }
+  const fixed = best && `${email.slice(0, at)}@${best}`;
+  return fixed && fixed !== email ? fixed : null;
+}
+
 const zl = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' });
 export const formatPrice = (value) => zl.format(value);
 export const formatRate = (rate) => `${(rate || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} zł/min`;
