@@ -166,8 +166,14 @@ function requireUser(req) {
   return user;
 }
 // Blokada po 5 nieudanych próbach logowania z jednego adresu.
+// Za reverse proxy prawdziwy adres klienta to ostatni wpis X-Forwarded-For (dopisuje go proxy).
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+function clientIp(req) {
+  const forwarded = TRUST_PROXY && String(req.headers['x-forwarded-for'] || '').split(',').pop().trim();
+  return forwarded || req.socket.remoteAddress;
+}
 function throttle(req) {
-  const ip = req.socket.remoteAddress;
+  const ip = clientIp(req);
   const f = loginFailures.get(ip);
   if (f && f.until > Date.now()) fail(429, 'Za dużo prób. Spróbuj za minutę.');
   return {

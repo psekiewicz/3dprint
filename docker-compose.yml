@@ -1,0 +1,15 @@
+services:
+  druk3d:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Tylko dla tego serwera (127.0.0.1) — do internetu wystawia go reverse proxy z HTTPS.
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Aplikacja stoi za reverse proxy, więc adres klienta bierze z nagłówka X-Forwarded-For.
+      TRUST_PROXY: "1"
+    volumes:
+      - druk3d-data:/data
+
+volumes:
+  druk3d-data:

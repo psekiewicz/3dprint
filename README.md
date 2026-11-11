@@ -49,6 +49,16 @@ journalctl -u druk3d    # tu widać hasło z pierwszego uruchomienia
 
 Plik usługi zakłada użytkownika `pi` i katalog `/home/pi/3dprint` — popraw go, jeśli masz inaczej.
 
+### Uruchomienie w Dockerze (np. na serwerze VPS)
+
+```bash
+git clone https://github.com/psekiewicz/3dprint.git && cd 3dprint
+docker compose up -d --build
+docker compose logs druk3d    # hasło sprzedawcy i kod klasy z pierwszego uruchomienia
+```
+
+Aplikacja słucha wtedy na `127.0.0.1:3000` tego serwera. Do internetu wystawia ją reverse proxy z HTTPS (nginx, Caddy, Traefik…), przekierowując subdomenę na ten port. Dane leżą w wolumenie `druk3d-data` i przetrwają aktualizację: `git pull && docker compose up -d --build`.
+
 ### Ustawienia serwera (zmienne środowiskowe)
 
 | Zmienna | Domyślnie | Opis |
@@ -56,6 +66,7 @@ Plik usługi zakłada użytkownika `pi` i katalog `/home/pi/3dprint` — popraw 
 | `PORT` | `3000` | Port serwera |
 | `DATA_DIR` | `./data` | Katalog z bazą i plikami modeli |
 | `ADMIN_PASSWORD` | — | Ustawia hasło sprzedawcy przy starcie |
+| `TRUST_PROXY` | — | `1`, gdy serwer stoi za reverse proxy (blokada błędnych logowań liczy wtedy prawdziwe adresy z `X-Forwarded-For`) |
 | `ALLOWED_ORIGIN` | `*` | Adres strony, która może korzystać z API (np. `https://psekiewicz.github.io`) |
 
 **Kopia zapasowa:** wystarczy skopiować katalog `data/`.
